@@ -2,6 +2,18 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../services/firestore_service.dart';
 
+class _GroupMember {
+  const _GroupMember({
+    required this.uid,
+    required this.email,
+    required this.displayName,
+  });
+
+  final String uid;
+  final String email;
+  final String displayName;
+}
+
 /// Pantalla de creación de grupos (H.4). Permite agregar integrantes
 /// por correo electrónico (deben tener cuenta creada en SplitEasy).
 class CreateGroupScreen extends StatefulWidget {
@@ -18,8 +30,8 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
   final _memberEmailController = TextEditingController();
   final _firestoreService = FirestoreService();
 
-  // uid -> nombre, de los integrantes ya agregados (incluye al creador)
-  final Map<String, String> _members = {};
+  // uid -> datos del integrante validado (incluye al creador)
+  final Map<String, _GroupMember> _members = {};
   bool _isLoading = false;
   bool _isAddingMember = false;
   String? _errorMessage;
@@ -29,7 +41,11 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
     super.initState();
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      _members[user.uid] = user.displayName ?? user.email ?? 'Yo';
+      _members[user.uid] = _GroupMember(
+        uid: user.uid,
+        email: user.email ?? '',
+        displayName: user.displayName ?? user.email ?? 'Yo',
+      );
     }
   }
 
@@ -45,15 +61,47 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
     try {
       final user = await _firestoreService.findUserByEmail(email);
       if (user == null) {
-        setState(
-          () => _errorMessage = 'No se encontró un usuario con ese correo.',
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'El usuario no está registrado en Split-Easy. Debe crear una cuenta primero.',
+              ),
+            ),
+          );
+        }
         return;
       }
+
+      final uid = user['uid'] as String;
+      if (_members.containsKey(uid)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Este usuario ya está en el grupo.')),
+          );
+        }
+        return;
+      }
+
+      final userEmail = (user['email'] as String?) ?? email;
+      final displayName =
+          (user['displayName'] as String?) ??
+          (user['name'] as String?) ??
+          userEmail;
+      if (!mounted) return;
+
       setState(() {
-        _members[user['uid']] = user['name'] ?? email;
+        _members[uid] = _GroupMember(
+          uid: uid,
+          email: userEmail,
+          displayName: displayName,
+        );
         _memberEmailController.clear();
       });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _errorMessage = 'No se pudo validar el usuario: $e');
+      }
     } finally {
       if (mounted) setState(() => _isAddingMember = false);
     }
@@ -63,7 +111,10 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser == null) return;
+    if (currentUser == null) {
+      setState(() => _errorMessage = 'Inicia sesión para crear un grupo.');
+      return;
+    }
 
     setState(() {
       _isLoading = true;
@@ -75,7 +126,9 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
         name: _nameController.text.trim(),
         description: _descriptionController.text.trim(),
         createdBy: currentUser.uid,
-        memberNames: _members,
+        memberNames: _members.map(
+          (uid, member) => MapEntry(uid, member.displayName),
+        ),
       );
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
@@ -83,6 +136,14 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _descriptionController.dispose();
+    _memberEmailController.dispose();
+    super.dispose();
   }
 
   @override
@@ -301,20 +362,25 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                               final isCreator =
                                   entry.key ==
                                   FirebaseAuth.instance.currentUser?.uid;
+                              final member = entry.value;
                               return InputChip(
                                 avatar: CircleAvatar(
                                   backgroundColor: scheme.primaryContainer,
                                   foregroundColor: scheme.onPrimaryContainer,
                                   child: Text(
-                                    entry.value.isNotEmpty
-                                        ? entry.value[0].toUpperCase()
+                                    member.displayName.isNotEmpty
+                                        ? member.displayName[0].toUpperCase()
                                         : '?',
                                     style: theme.textTheme.labelSmall?.copyWith(
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
                                 ),
-                                label: Text(entry.value),
+                                label: Text(
+                                  member.email.isEmpty
+                                      ? member.displayName
+                                      : '${member.displayName} · ${member.email}',
+                                ),
                                 deleteIcon: const Icon(
                                   Icons.close_rounded,
                                   size: 18,
@@ -322,7 +388,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                                 onDeleted: isCreator
                                     ? null
                                     : () => setState(
-                                        () => _members.remove(entry.key),
+                                        () => _members.remove(member.uid),
                                       ),
                                 backgroundColor: scheme.surfaceContainerHighest,
                                 side: BorderSide(

@@ -17,13 +17,11 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final _firestoreService = FirestoreService();
   final _messageController = TextEditingController();
-  final _scrollController = ScrollController();
   bool _isSending = false;
 
   @override
   void dispose() {
     _messageController.dispose();
-    _scrollController.dispose();
     super.dispose();
   }
 
@@ -31,17 +29,32 @@ class _ChatScreenState extends State<ChatScreen> {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Inicia sesión para enviar mensajes.')),
+      );
+      return;
+    }
 
     setState(() => _isSending = true);
     try {
       await _firestoreService.sendTextMessage(
         groupId: widget.group.id,
         senderId: user.uid,
-        senderName: widget.group.memberNames[user.uid] ?? 'Usuario',
+        senderName:
+            widget.group.memberNames[user.uid] ??
+            user.displayName ??
+            user.email ??
+            'Usuario',
         text: text,
       );
-      _messageController.clear();
+      if (mounted) _messageController.clear();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo enviar el mensaje: $error')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isSending = false);
     }
@@ -50,6 +63,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     final currentUid = FirebaseAuth.instance.currentUser?.uid;
+    final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(title: Text('Chat · ${widget.group.name}')),
@@ -59,6 +73,18 @@ class _ChatScreenState extends State<ChatScreen> {
             child: StreamBuilder<List<ChatMessage>>(
               stream: _firestoreService.watchMessages(widget.group.id),
               builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        'No se pudieron cargar los mensajes: ${snapshot.error}',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: scheme.error),
+                      ),
+                    ),
+                  );
+                }
                 if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
@@ -68,19 +94,13 @@ class _ChatScreenState extends State<ChatScreen> {
                     child: Text(
                       'Aún no hay mensajes.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey.shade600),
+                      style: TextStyle(color: scheme.onSurfaceVariant),
                     ),
                   );
                 }
 
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (_scrollController.hasClients) {
-                    _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
-                  }
-                });
-
                 return ListView.builder(
-                  controller: _scrollController,
+                  reverse: true,
                   padding: const EdgeInsets.all(12),
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
@@ -91,7 +111,11 @@ class _ChatScreenState extends State<ChatScreen> {
                       return _SystemMessageBubble(message: message);
                     }
                     if (message.type == 'proposal') {
-                      return _ProposalCard(group: widget.group, message: message, currentUid: currentUid);
+                      return _ProposalCard(
+                        group: widget.group,
+                        message: message,
+                        currentUid: currentUid,
+                      );
                     }
                     if (message.type == 'settlement_request') {
                       return _SettlementRequestBubble(message: message);
@@ -104,16 +128,35 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           SafeArea(
             child: Padding(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
               child: Row(
                 children: [
                   Expanded(
                     child: TextField(
                       controller: _messageController,
+                      textCapitalization: TextCapitalization.sentences,
+                      minLines: 1,
+                      maxLines: 5,
                       decoration: InputDecoration(
                         hintText: 'Escribe un mensaje...',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(24)),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                        filled: true,
+                        fillColor: scheme.surfaceContainerHighest,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(28),
+                          borderSide: BorderSide.none,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(28),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(28),
+                          borderSide: BorderSide(color: scheme.primary),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 12,
+                        ),
                       ),
                       onSubmitted: (_) => _sendMessage(),
                     ),
@@ -140,25 +183,53 @@ class _TextMessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final foregroundColor = isMine ? scheme.onPrimary : scheme.onSurface;
+
     return Align(
       alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 4),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.75,
+        ),
         decoration: BoxDecoration(
-          color: isMine ? Theme.of(context).colorScheme.primary : Colors.grey.shade200,
+          color: isMine ? scheme.primary : scheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (!isMine)
-              Text(message.senderName,
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey.shade700)),
-            Text(message.text ?? '', style: TextStyle(color: isMine ? Colors.white : Colors.black87)),
-            Text(DateFormat('HH:mm').format(message.createdAt),
-                style: TextStyle(fontSize: 10, color: isMine ? Colors.white70 : Colors.grey.shade500)),
+              Text(
+                message.senderName,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            Text(
+              message.text ?? '',
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: foregroundColor,
+              ),
+            ),
+            Align(
+              alignment: Alignment.bottomRight,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  DateFormat('HH:mm').format(message.createdAt),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: isMine
+                        ? scheme.onPrimary.withValues(alpha: 0.75)
+                        : scheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -177,7 +248,10 @@ class _SystemMessageBubble extends StatelessWidget {
       child: Center(
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(12)),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(12),
+          ),
           child: Text(
             message.text ?? '',
             textAlign: TextAlign.center,
@@ -200,7 +274,10 @@ class _SettlementRequestBubble extends StatelessWidget {
       child: Center(
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(10)),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade50,
+            borderRadius: BorderRadius.circular(10),
+          ),
           child: Text(
             '💵 ${message.senderName} avisó que pagó su cuota de "${message.expenseDescription ?? 'un gasto'}"',
             textAlign: TextAlign.center,
@@ -218,25 +295,38 @@ class _ProposalCard extends StatelessWidget {
   final ChatMessage message;
   final String? currentUid;
 
-  const _ProposalCard({required this.group, required this.message, required this.currentUid});
+  const _ProposalCard({
+    required this.group,
+    required this.message,
+    required this.currentUid,
+  });
 
   @override
   Widget build(BuildContext context) {
     final firestoreService = FirestoreService();
-    final currencyFormat = NumberFormat.currency(locale: 'es_CL', symbol: '\$', decimalDigits: 0);
+    final currencyFormat = NumberFormat.currency(
+      locale: 'es_CL',
+      symbol: '\$',
+      decimalDigits: 0,
+    );
 
     if (message.expenseId == null || message.proposalId == null) {
       return const SizedBox.shrink();
     }
 
     return StreamBuilder<ExpenseProposal?>(
-      stream: firestoreService.watchProposal(group.id, message.expenseId!, message.proposalId!),
+      stream: firestoreService.watchProposal(
+        group.id,
+        message.expenseId!,
+        message.proposalId!,
+      ),
       builder: (context, snapshot) {
         final proposal = snapshot.data;
         if (proposal == null) return const SizedBox.shrink();
 
         final isDelete = proposal.type == 'delete';
-        final hasResponded = currentUid != null && proposal.hasResponded(currentUid!);
+        final hasResponded =
+            currentUid != null && proposal.hasResponded(currentUid!);
         final pending = proposal.pendingMembers(group.memberIds);
 
         Color statusColor;
@@ -248,7 +338,9 @@ class _ProposalCard extends StatelessWidget {
             break;
           case 'rejected':
             statusColor = Colors.red;
-            statusText = isDelete ? '❌ Eliminación rechazada' : '❌ Cambio rechazado';
+            statusText = isDelete
+                ? '❌ Eliminación rechazada'
+                : '❌ Cambio rechazado';
             break;
           default:
             statusColor = Colors.orange;
@@ -267,8 +359,11 @@ class _ProposalCard extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Icon(isDelete ? Icons.delete_outline : Icons.edit_note,
-                        size: 20, color: isDelete ? Colors.red : Colors.blueGrey),
+                    Icon(
+                      isDelete ? Icons.delete_outline : Icons.edit_note,
+                      size: 20,
+                      color: isDelete ? Colors.red : Colors.blueGrey,
+                    ),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
@@ -290,10 +385,22 @@ class _ProposalCard extends StatelessWidget {
                   ..._buildDiffLines(proposal, currencyFormat),
                 const SizedBox(height: 10),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
-                  child: Text(statusText,
-                      style: TextStyle(color: statusColor, fontSize: 12, fontWeight: FontWeight.bold)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    statusText,
+                    style: TextStyle(
+                      color: statusColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
                 if (proposal.status == 'pending' && !hasResponded) ...[
                   const SizedBox(height: 10),
@@ -301,15 +408,27 @@ class _ProposalCard extends StatelessWidget {
                     children: [
                       Expanded(
                         child: OutlinedButton(
-                          onPressed: () => _respond(context, firestoreService, proposal, 'rejected'),
+                          onPressed: () => _respond(
+                            context,
+                            firestoreService,
+                            proposal,
+                            'rejected',
+                          ),
                           child: const Text('Rechazar'),
                         ),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: FilledButton(
-                          onPressed: () => _respond(context, firestoreService, proposal, 'accepted'),
-                          child: Text(isDelete ? 'Aceptar eliminación' : 'Aceptar'),
+                          onPressed: () => _respond(
+                            context,
+                            firestoreService,
+                            proposal,
+                            'accepted',
+                          ),
+                          child: Text(
+                            isDelete ? 'Aceptar eliminación' : 'Aceptar',
+                          ),
                         ),
                       ),
                     ],
@@ -323,31 +442,40 @@ class _ProposalCard extends StatelessWidget {
     );
   }
 
-  List<Widget> _buildDiffLines(ExpenseProposal proposal, NumberFormat currencyFormat) {
+  List<Widget> _buildDiffLines(
+    ExpenseProposal proposal,
+    NumberFormat currencyFormat,
+  ) {
     final lines = <Widget>[];
     final old = proposal.oldValues;
     final updated = proposal.newValues;
 
     if (old['description'] != updated['description']) {
-      lines.add(_diffText('Descripción', old['description'], updated['description']));
+      lines.add(
+        _diffText('Descripción', old['description'], updated['description']),
+      );
     }
     if (old['amount'] != updated['amount']) {
-      lines.add(_diffText(
-        'Monto',
-        currencyFormat.format((old['amount'] as num).toDouble()),
-        currencyFormat.format((updated['amount'] as num).toDouble()),
-      ));
+      lines.add(
+        _diffText(
+          'Monto',
+          currencyFormat.format((old['amount'] as num).toDouble()),
+          currencyFormat.format((updated['amount'] as num).toDouble()),
+        ),
+      );
     }
     if (old['category'] != updated['category']) {
       lines.add(_diffText('Categoría', old['category'], updated['category']));
     }
-    lines.add(const Padding(
-      padding: EdgeInsets.only(top: 4),
-      child: Text(
-        'Revisa el detalle del gasto para ver los pagadores y participantes actualizados.',
-        style: TextStyle(fontSize: 11, color: Colors.black54),
+    lines.add(
+      const Padding(
+        padding: EdgeInsets.only(top: 4),
+        child: Text(
+          'Revisa el detalle del gasto para ver los pagadores y participantes actualizados.',
+          style: TextStyle(fontSize: 11, color: Colors.black54),
+        ),
       ),
-    ));
+    );
 
     return lines;
   }
@@ -359,17 +487,37 @@ class _ProposalCard extends StatelessWidget {
         text: TextSpan(
           style: const TextStyle(fontSize: 13, color: Colors.black87),
           children: [
-            TextSpan(text: '$label: ', style: const TextStyle(fontWeight: FontWeight.bold)),
-            TextSpan(text: '$oldValue', style: const TextStyle(decoration: TextDecoration.lineThrough, color: Colors.black45)),
+            TextSpan(
+              text: '$label: ',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            TextSpan(
+              text: '$oldValue',
+              style: const TextStyle(
+                decoration: TextDecoration.lineThrough,
+                color: Colors.black45,
+              ),
+            ),
             const TextSpan(text: '  →  '),
-            TextSpan(text: '$newValue', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+            TextSpan(
+              text: '$newValue',
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.blue,
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Future<void> _respond(BuildContext context, FirestoreService service, ExpenseProposal proposal, String response) async {
+  Future<void> _respond(
+    BuildContext context,
+    FirestoreService service,
+    ExpenseProposal proposal,
+    String response,
+  ) async {
     if (currentUid == null) return;
     try {
       final finalStatus = await service.respondToProposal(
@@ -394,17 +542,21 @@ class _ProposalCard extends StatelessWidget {
       } else if (finalStatus == 'rejected') {
         await service.sendSystemMessage(
           groupId: group.id,
-          text: '❌ $myName rechazó ${isDelete ? 'la eliminación' : 'el cambio'} propuesto por ${proposal.proposedByName}.',
+          text:
+              '❌ $myName rechazó ${isDelete ? 'la eliminación' : 'el cambio'} propuesto por ${proposal.proposedByName}.',
         );
       } else {
         await service.sendSystemMessage(
           groupId: group.id,
-          text: '$myName aceptó ${isDelete ? 'la eliminación' : 'el cambio'} propuesto por ${proposal.proposedByName}.',
+          text:
+              '$myName aceptó ${isDelete ? 'la eliminación' : 'el cambio'} propuesto por ${proposal.proposedByName}.',
         );
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No se pudo responder: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('No se pudo responder: $e')));
       }
     }
   }

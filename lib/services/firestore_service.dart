@@ -68,6 +68,7 @@ class FirestoreService {
       'name': name,
       'description': description,
       'createdBy': createdBy,
+      'members': memberNames.keys.toList(),
       'memberIds': memberNames.keys.toList(),
       'memberNames': memberNames,
       'customCategories': <String>[],
@@ -235,6 +236,7 @@ class FirestoreService {
       'senderName': uidName,
       'expenseId': expenseId,
       'expenseDescription': expenseDescription,
+      'timestamp': FieldValue.serverTimestamp(),
       'createdAt': Timestamp.now(),
     });
     await _logHistory(
@@ -321,6 +323,7 @@ class FirestoreService {
       'senderName': proposedByName,
       'expenseId': expenseId,
       'proposalId': proposalRef.id,
+      'timestamp': FieldValue.serverTimestamp(),
       'createdAt': Timestamp.now(),
     });
 
@@ -362,6 +365,7 @@ class FirestoreService {
       'senderName': proposedByName,
       'expenseId': expenseId,
       'proposalId': proposalRef.id,
+      'timestamp': FieldValue.serverTimestamp(),
       'createdAt': Timestamp.now(),
     });
 
@@ -484,7 +488,7 @@ class FirestoreService {
 
   Stream<List<ChatMessage>> watchMessages(String groupId) {
     return _messagesRef(groupId)
-        .orderBy('createdAt')
+        .orderBy('timestamp', descending: true)
         .snapshots()
         .map((snap) => snap.docs.map((d) => ChatMessage.fromFirestore(d)).toList());
   }
@@ -500,6 +504,7 @@ class FirestoreService {
       'senderId': senderId,
       'senderName': senderName,
       'text': text,
+      'timestamp': FieldValue.serverTimestamp(),
       'createdAt': Timestamp.now(),
     });
   }
@@ -513,6 +518,7 @@ class FirestoreService {
       'senderId': 'system',
       'senderName': 'SplitEasy',
       'text': text,
+      'timestamp': FieldValue.serverTimestamp(),
       'createdAt': Timestamp.now(),
     });
   }
@@ -613,11 +619,11 @@ class FirestoreService {
 
       if (amount > 0.01) {
         transactions.add(SettlementTransaction(
-          fromUid: debtor.uid,
-          fromName: debtor.name,
-          toUid: creditor.uid,
-          toName: creditor.name,
-          amount: double.parse(amount.toStringAsFixed(2)),
+            fromUid: debtor.uid,
+            fromName: debtor.name,
+            toUid: creditor.uid,
+            toName: creditor.name,
+            amount: double.parse(amount.toStringAsFixed(2)),
         ));
       }
 

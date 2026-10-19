@@ -39,7 +39,10 @@ class ChatMessage {
       expenseId: data['expenseId'],
       expenseDescription: data['expenseDescription'],
       proposalId: data['proposalId'],
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      createdAt:
+          (data['timestamp'] as Timestamp?)?.toDate() ??
+          (data['createdAt'] as Timestamp?)?.toDate() ??
+          DateTime.now(),
     );
   }
 }
