@@ -26,23 +26,23 @@ class _ReportsScreenState extends State<ReportsScreen> {
       _errorMessage = null;
     });
     try {
-      final expenses =
-          await _firestoreService.getGroupExpensesOnce(widget.group.id);
+      final expenses = await _firestoreService.getGroupExpensesOnce(
+        widget.group.id,
+      );
       final balances = _firestoreService.calculateBalances(
         group: widget.group,
         expenses: expenses,
       );
       final settlements = _firestoreService.simplifyDebts(balances);
 
-      final file = await _reportService.generatePdfReport(
+      await _reportService.exportPdfReport(
         group: widget.group,
         expenses: expenses,
         balances: balances,
         settlements: settlements,
       );
-      await _reportService.shareFile(file);
     } catch (e) {
-      setState(() => _errorMessage = 'No se pudo generar el PDF: $e');
+      _showExportError('No se pudo generar el PDF', e);
     } finally {
       if (mounted) setState(() => _isGeneratingPdf = false);
     }
@@ -54,24 +54,33 @@ class _ReportsScreenState extends State<ReportsScreen> {
       _errorMessage = null;
     });
     try {
-      final expenses =
-          await _firestoreService.getGroupExpensesOnce(widget.group.id);
+      final expenses = await _firestoreService.getGroupExpensesOnce(
+        widget.group.id,
+      );
       final balances = _firestoreService.calculateBalances(
         group: widget.group,
         expenses: expenses,
       );
 
-      final file = await _reportService.generateExcelReport(
+      await _reportService.exportExcelReport(
         group: widget.group,
         expenses: expenses,
         balances: balances,
       );
-      await _reportService.shareFile(file);
     } catch (e) {
-      setState(() => _errorMessage = 'No se pudo generar el Excel: $e');
+      _showExportError('No se pudo generar el Excel', e);
     } finally {
       if (mounted) setState(() => _isGeneratingExcel = false);
     }
+  }
+
+  void _showExportError(String message, Object error) {
+    if (!mounted) return;
+    final fullMessage = '$message: $error';
+    setState(() => _errorMessage = fullMessage);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(fullMessage)));
   }
 
   @override

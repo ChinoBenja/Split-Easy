@@ -1,16 +1,18 @@
-import 'dart:io';
 import 'package:excel/excel.dart' as excel_lib;
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:share_plus/share_plus.dart';
+
+import '../models/balance_model.dart';
 import '../models/expense_model.dart';
 import '../models/group_model.dart';
-import '../models/balance_model.dart';
+import 'report_exporter_stub.dart'
+    if (dart.library.io) 'report_exporter_io.dart'
+    if (dart.library.html) 'report_exporter_web.dart'
+    as exporter;
 
-/// Servicio de exportación de reportes (Requerimiento funcional:
-/// "Generar reportes exportables en PDF y Excel").
+/// Servicio de exportación de reportes en Web y plataformas nativas.
 class ReportService {
   final _currencyFormat = NumberFormat.currency(
     locale: 'es_CL',
@@ -19,11 +21,7 @@ class ReportService {
   );
   final _dateFormat = DateFormat('dd/MM/yyyy');
 
-  // ---------------------------------------------------------------------
-  // PDF
-  // ---------------------------------------------------------------------
-
-  Future<File> generatePdfReport({
+  Future<void> exportPdfReport({
     required GroupModel group,
     required List<ExpenseModel> expenses,
     required List<MemberBalance> balances,
@@ -38,79 +36,97 @@ class ReportService {
         build: (context) => [
           pw.Header(
             level: 0,
-            child: pw.Text('Reporte de gastos - ${group.name}',
-                style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
+            child: pw.Text(
+              'Reporte de gastos - ${group.name}',
+              style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
+            ),
           ),
           pw.Text('Generado el ${_dateFormat.format(DateTime.now())}'),
           pw.SizedBox(height: 16),
-
-          pw.Text('Total del grupo: ${_currencyFormat.format(totalAmount)}',
-              style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+          pw.Text(
+            'Total del grupo: ${_currencyFormat.format(totalAmount)}',
+            style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+          ),
           pw.SizedBox(height: 12),
-
-          pw.Text('Detalle de gastos',
-              style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+          pw.Text(
+            'Detalle de gastos',
+            style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+          ),
           pw.SizedBox(height: 6),
-          pw.Table.fromTextArray(
-            headers: ['Fecha', 'Descripción', 'Categoría', 'Pagado por', 'Monto'],
+          pw.TableHelper.fromTextArray(
+            headers: [
+              'Fecha',
+              'Descripción',
+              'Categoría',
+              'Pagado por',
+              'Monto',
+            ],
             data: expenses
-                .map((e) => [
-                      _dateFormat.format(e.date),
-                      e.description,
-                      e.category,
-                      e.payersSummary,
-                      _currencyFormat.format(e.amount),
-                    ])
+                .map(
+                  (e) => [
+                    _dateFormat.format(e.date),
+                    e.description,
+                    e.category,
+                    e.payersSummary,
+                    _currencyFormat.format(e.amount),
+                  ],
+                )
                 .toList(),
           ),
           pw.SizedBox(height: 20),
-
-          pw.Text('Balance por integrante',
-              style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+          pw.Text(
+            'Balance por integrante',
+            style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+          ),
           pw.SizedBox(height: 6),
-          pw.Table.fromTextArray(
+          pw.TableHelper.fromTextArray(
             headers: ['Integrante', 'Pagó', 'Le correspondía', 'Balance'],
             data: balances
-                .map((b) => [
-                      b.name,
-                      _currencyFormat.format(b.totalPaid),
-                      _currencyFormat.format(b.totalOwed),
-                      _currencyFormat.format(b.balance),
-                    ])
+                .map(
+                  (b) => [
+                    b.name,
+                    _currencyFormat.format(b.totalPaid),
+                    _currencyFormat.format(b.totalOwed),
+                    _currencyFormat.format(b.balance),
+                  ],
+                )
                 .toList(),
           ),
           pw.SizedBox(height: 20),
-
-          pw.Text('Liquidación sugerida',
-              style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+          pw.Text(
+            'Liquidación sugerida',
+            style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+          ),
           pw.SizedBox(height: 6),
           ...settlements.map(
             (s) => pw.Text(
-                '${s.fromName} le debe ${_currencyFormat.format(s.amount)} a ${s.toName}'),
+              '${s.fromName} le debe ${_currencyFormat.format(s.amount)} a ${s.toName}',
+            ),
           ),
         ],
       ),
     );
 
-    final dir = await getApplicationDocumentsDirectory();
-    final file = File(
-        '${dir.path}/SplitEasy_${group.name}_${DateTime.now().millisecondsSinceEpoch}.pdf');
-    await file.writeAsBytes(await doc.save());
-    return file;
+    final bytes = await doc.save();
+    final filename = _filename(group.name, 'pdf');
+    try {
+      if (kIsWeb) {
+        await exporter.exportPdfForWeb(bytes, filename);
+      } else {
+        await exporter.exportPdfForNative(bytes, filename);
+      }
+    } catch (error) {
+      throw Exception('No se pudo guardar o compartir el PDF: $error');
+    }
   }
 
-  // ---------------------------------------------------------------------
-  // EXCEL
-  // ---------------------------------------------------------------------
-
-  Future<File> generateExcelReport({
+  Future<void> exportExcelReport({
     required GroupModel group,
     required List<ExpenseModel> expenses,
     required List<MemberBalance> balances,
   }) async {
     final workbook = excel_lib.Excel.createExcel();
 
-    // Hoja de gastos
     final expensesSheet = workbook['Gastos'];
     expensesSheet.appendRow([
       excel_lib.TextCellValue('Fecha'),
@@ -119,17 +135,16 @@ class ReportService {
       excel_lib.TextCellValue('Pagado por'),
       excel_lib.TextCellValue('Monto'),
     ]);
-    for (final e in expenses) {
+    for (final expense in expenses) {
       expensesSheet.appendRow([
-        excel_lib.TextCellValue(_dateFormat.format(e.date)),
-        excel_lib.TextCellValue(e.description),
-        excel_lib.TextCellValue(e.category),
-        excel_lib.TextCellValue(e.payersSummary),
-        excel_lib.DoubleCellValue(e.amount),
+        excel_lib.TextCellValue(_dateFormat.format(expense.date)),
+        excel_lib.TextCellValue(expense.description),
+        excel_lib.TextCellValue(expense.category),
+        excel_lib.TextCellValue(expense.payersSummary),
+        excel_lib.DoubleCellValue(expense.amount),
       ]);
     }
 
-    // Hoja de balances
     final balanceSheet = workbook['Balances'];
     balanceSheet.appendRow([
       excel_lib.TextCellValue('Integrante'),
@@ -137,32 +152,44 @@ class ReportService {
       excel_lib.TextCellValue('Le correspondía'),
       excel_lib.TextCellValue('Balance'),
     ]);
-    for (final b in balances) {
+    for (final balance in balances) {
       balanceSheet.appendRow([
-        excel_lib.TextCellValue(b.name),
-        excel_lib.DoubleCellValue(b.totalPaid),
-        excel_lib.DoubleCellValue(b.totalOwed),
-        excel_lib.DoubleCellValue(b.balance),
+        excel_lib.TextCellValue(balance.name),
+        excel_lib.DoubleCellValue(balance.totalPaid),
+        excel_lib.DoubleCellValue(balance.totalOwed),
+        excel_lib.DoubleCellValue(balance.balance),
       ]);
     }
 
-    // Elimina la hoja default vacía "Sheet1" si quedó
     if (workbook.sheets.containsKey('Sheet1')) {
       workbook.delete('Sheet1');
     }
 
-    final dir = await getApplicationDocumentsDirectory();
-    final file = File(
-        '${dir.path}/SplitEasy_${group.name}_${DateTime.now().millisecondsSinceEpoch}.xlsx');
     final bytes = workbook.encode();
-    if (bytes != null) {
-      await file.writeAsBytes(bytes);
+    if (bytes == null) {
+      throw StateError('No se pudieron generar los datos del archivo Excel.');
     }
-    return file;
+
+    final filename = _filename(group.name, 'xlsx');
+    try {
+      if (kIsWeb) {
+        await exporter.exportExcelForWeb(bytes, filename);
+      } else {
+        await exporter.exportExcelForNative(bytes, filename);
+      }
+    } catch (error) {
+      throw Exception(
+        'No se pudo guardar o compartir el archivo Excel: $error',
+      );
+    }
   }
 
-  /// Comparte el archivo generado usando el selector nativo del sistema
-  Future<void> shareFile(File file) async {
-    await Share.shareXFiles([XFile(file.path)]);
+  String _filename(String groupName, String extension) {
+    final safeGroupName = groupName
+        .trim()
+        .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
+        .replaceAll(RegExp(r'\s+'), '_');
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    return 'SplitEasy_${safeGroupName}_$timestamp.$extension';
   }
 }
