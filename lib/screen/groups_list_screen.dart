@@ -8,6 +8,7 @@ import '../../models/group_model.dart';
 import '../../services/firestore_service.dart';
 import 'create_group_screen.dart';
 import 'group_detail_screen.dart';
+import 'profile_screen.dart';
 
 /// Pantalla principal tras el login: lista de grupos del usuario (H.4)
 class GroupsListScreen extends StatefulWidget {
@@ -93,7 +94,13 @@ class _GroupsListScreenState extends State<GroupsListScreen> {
               ),
             ),
             onSelected: (value) {
-              if (value == 'sign_out') {
+              if (value == 'profile') {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const ProfileScreen(),
+                  ),
+                );
+              } else if (value == 'sign_out') {
                 FirebaseAuth.instance.signOut();
               }
             },
@@ -111,6 +118,16 @@ class _GroupsListScreenState extends State<GroupsListScreen> {
                 ),
               ),
               const PopupMenuDivider(),
+              const PopupMenuItem<String>(
+                value: 'profile',
+                child: Row(
+                  children: [
+                    Icon(Icons.person_outline_rounded, size: 20),
+                    SizedBox(width: 12),
+                    Text('Mi perfil'),
+                  ],
+                ),
+              ),
               const PopupMenuItem<String>(
                 value: 'sign_out',
                 child: Row(
@@ -357,6 +374,8 @@ class _GroupsDashboardState extends State<_GroupsDashboard> {
               hasError: _hasBalanceError,
               currencyFormat: _currencyFormat,
             ),
+            const SizedBox(height: 24),
+            _PendingInvitationsSection(uid: widget.uid),
             const SizedBox(height: 30),
             Row(
               children: [
@@ -427,6 +446,170 @@ class _GroupsDashboardState extends State<_GroupsDashboard> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _PendingInvitationsSection extends StatefulWidget {
+  const _PendingInvitationsSection({required this.uid});
+
+  final String uid;
+
+  @override
+  State<_PendingInvitationsSection> createState() =>
+      _PendingInvitationsSectionState();
+}
+
+class _PendingInvitationsSectionState
+    extends State<_PendingInvitationsSection> {
+  final _firestoreService = FirestoreService();
+  final Set<String> _respondingGroupIds = {};
+  late Stream<List<GroupModel>> _invitationsStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _invitationsStream = _firestoreService.watchPendingInvitations(widget.uid);
+  }
+
+  @override
+  void didUpdateWidget(covariant _PendingInvitationsSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.uid != widget.uid) {
+      _invitationsStream = _firestoreService.watchPendingInvitations(
+        widget.uid,
+      );
+    }
+  }
+
+  Future<void> _respond(GroupModel group, {required bool accept}) async {
+    if (!_respondingGroupIds.add(group.id)) return;
+    setState(() {});
+
+    try {
+      await _firestoreService.respondToGroupInvitation(
+        groupId: group.id,
+        accept: accept,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            accept
+                ? 'Te uniste al grupo "${group.name}".'
+                : 'Invitación al grupo "${group.name}" rechazada.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo responder a la invitación: $error')),
+      );
+    } finally {
+      _respondingGroupIds.remove(group.id);
+      if (mounted) setState(() {});
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return StreamBuilder<List<GroupModel>>(
+      stream: _invitationsStream,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Card(
+            color: colors.errorContainer,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                'No se pudieron cargar las invitaciones: ${snapshot.error}',
+                style: TextStyle(color: colors.onErrorContainer),
+              ),
+            ),
+          );
+        }
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        final invitations = snapshot.data!;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Invitaciones pendientes',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ...invitations.map((group) {
+              final isResponding = _respondingGroupIds.contains(group.id);
+              return Card(
+                margin: const EdgeInsets.only(bottom: 10),
+                color: colors.secondaryContainer,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.group_add_outlined,
+                            color: colors.onSecondaryContainer,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              group.name,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: colors.onSecondaryContainer,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (group.description.trim().isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          group.description,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colors.onSecondaryContainer,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      if (isResponding)
+                        const LinearProgressIndicator()
+                      else
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            TextButton(
+                              onPressed: () => _respond(group, accept: false),
+                              child: const Text('Rechazar'),
+                            ),
+                            const SizedBox(width: 8),
+                            FilledButton(
+                              onPressed: () => _respond(group, accept: true),
+                              child: const Text('Aceptar'),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ],
+        );
+      },
     );
   }
 }

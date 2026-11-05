@@ -1,0 +1,30 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isGroupMember(groupId) {
+      return request.auth != null
+        && firestore.exists(/databases/(default)/documents/groups/$(groupId))
+        && request.auth.uid in firestore.get(
+          /databases/(default)/documents/groups/$(groupId)
+        ).data.memberIds;
+    }
+
+    match /chat_images/{groupId}/{imageName} {
+      allow read: if isGroupMember(groupId);
+      allow create: if isGroupMember(groupId)
+        && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow update, delete: if false;
+    }
+
+    match /profile_images/{fileName} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null
+        && fileName.matches(request.auth.uid + '\\.[a-z0-9]+')
+        && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if false;
+    }
+  }
+}

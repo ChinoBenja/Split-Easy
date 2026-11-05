@@ -1,5 +1,9 @@
+import 'dart:math' as math;
+
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../../models/expense_proposal_model.dart';
 import '../../models/group_model.dart';
@@ -17,7 +21,18 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final _firestoreService = FirestoreService();
   final _messageController = TextEditingController();
+  late final Future<Map<String, String>> _memberPhotoUrls;
   bool _isSending = false;
+  bool _isPickingImage = false;
+  bool _isUploadingImage = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _memberPhotoUrls = _firestoreService.getUserPhotoUrls(
+      widget.group.memberIds,
+    );
+  }
 
   @override
   void dispose() {
@@ -27,7 +42,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
-    if (text.isEmpty) return;
+    if (_isSending || text.isEmpty) return;
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -47,6 +62,7 @@ class _ChatScreenState extends State<ChatScreen> {
             user.email ??
             'Usuario',
         text: text,
+        senderPhotoUrl: user.photoURL,
       );
       if (mounted) _messageController.clear();
     } catch (error) {
@@ -57,6 +73,87 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     } finally {
       if (mounted) setState(() => _isSending = false);
+    }
+  }
+
+  Future<void> _pickAndSendImage() async {
+    if (_isSending) return;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Inicia sesión para enviar imágenes.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSending = true;
+      _isPickingImage = true;
+    });
+    try {
+      final image = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1920,
+        maxHeight: 1920,
+        imageQuality: 85,
+      );
+      if (image == null) return;
+
+      if (mounted) {
+        setState(() {
+          _isPickingImage = false;
+          _isUploadingImage = true;
+        });
+      }
+      final extension = image.name.contains('.')
+          ? image.name.split('.').last.toLowerCase()
+          : 'jpg';
+      final safeExtension = RegExp(r'^[a-z0-9]+$').hasMatch(extension)
+          ? extension
+          : 'jpg';
+      final contentType = image.mimeType?.startsWith('image/') == true
+          ? image.mimeType!
+          : 'image/$safeExtension';
+      final storageRef = FirebaseStorage.instance.ref().child(
+        'chat_images/${widget.group.id}/${DateTime.now().microsecondsSinceEpoch}_${user.uid}.$safeExtension',
+      );
+      final bytes = await image.readAsBytes();
+      if (bytes.length > 10 * 1024 * 1024) {
+        throw StateError('La imagen no puede superar los 10 MB.');
+      }
+      await storageRef.putData(
+        bytes,
+        SettableMetadata(contentType: contentType),
+      );
+      final imageUrl = await storageRef.getDownloadURL();
+
+      await _firestoreService.sendTextMessage(
+        groupId: widget.group.id,
+        senderId: user.uid,
+        senderName:
+            widget.group.memberNames[user.uid] ??
+            user.displayName ??
+            user.email ??
+            'Usuario',
+        text: _messageController.text.trim(),
+        imageUrl: imageUrl,
+        senderPhotoUrl: user.photoURL,
+      );
+      if (mounted) _messageController.clear();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo enviar la imagen: $error')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSending = false;
+          _isPickingImage = false;
+          _isUploadingImage = false;
+        });
+      }
     }
   }
 
@@ -99,75 +196,118 @@ class _ChatScreenState extends State<ChatScreen> {
                   );
                 }
 
-                return ListView.builder(
-                  reverse: true,
-                  padding: const EdgeInsets.all(12),
-                  itemCount: messages.length,
-                  itemBuilder: (context, index) {
-                    final message = messages[index];
-                    final isMine = message.senderId == currentUid;
+                return FutureBuilder<Map<String, String>>(
+                  future: _memberPhotoUrls,
+                  builder: (context, photoSnapshot) {
+                    final photoUrls =
+                        photoSnapshot.data ?? const <String, String>{};
+                    return ListView.builder(
+                      reverse: true,
+                      padding: const EdgeInsets.all(12),
+                      itemCount: messages.length,
+                      itemBuilder: (context, index) {
+                        final message = messages[index];
+                        final isMine = message.senderId == currentUid;
 
-                    if (message.type == 'system') {
-                      return _SystemMessageBubble(message: message);
-                    }
-                    if (message.type == 'proposal') {
-                      return _ProposalCard(
-                        group: widget.group,
-                        message: message,
-                        currentUid: currentUid,
-                      );
-                    }
-                    if (message.type == 'settlement_request') {
-                      return _SettlementRequestBubble(message: message);
-                    }
-                    return _TextMessageBubble(message: message, isMine: isMine);
+                        if (message.type == 'system') {
+                          return _SystemMessageBubble(message: message);
+                        }
+                        if (message.type == 'proposal') {
+                          return _ProposalCard(
+                            group: widget.group,
+                            message: message,
+                            currentUid: currentUid,
+                          );
+                        }
+                        if (message.type == 'settlement_request') {
+                          return _SettlementRequestBubble(message: message);
+                        }
+                        final storedPhotoUrl = message.senderPhotoUrl?.trim();
+                        return _TextMessageBubble(
+                          message: message,
+                          isMine: isMine,
+                          photoUrl:
+                              photoUrls[message.senderId] ??
+                              (storedPhotoUrl == null || storedPhotoUrl.isEmpty
+                                  ? null
+                                  : storedPhotoUrl),
+                        );
+                      },
+                    );
                   },
                 );
               },
             ),
           ),
           SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _messageController,
-                      textCapitalization: TextCapitalization.sentences,
-                      minLines: 1,
-                      maxLines: 5,
-                      decoration: InputDecoration(
-                        hintText: 'Escribe un mensaje...',
-                        filled: true,
-                        fillColor: scheme.surfaceContainerHighest,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(28),
-                          borderSide: BorderSide.none,
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(28),
-                          borderSide: BorderSide.none,
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(28),
-                          borderSide: BorderSide(color: scheme.primary),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 18,
-                          vertical: 12,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_isSending)
+                  Column(
+                    children: [
+                      const LinearProgressIndicator(),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          _isPickingImage
+                              ? 'Seleccionando imagen...'
+                              : _isUploadingImage
+                              ? 'Enviando imagen...'
+                              : 'Enviando mensaje...',
+                          style: Theme.of(context).textTheme.labelSmall,
                         ),
                       ),
-                      onSubmitted: (_) => _sendMessage(),
-                    ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  IconButton.filled(
-                    onPressed: _isSending ? null : _sendMessage,
-                    icon: const Icon(Icons.send),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _messageController,
+                          textCapitalization: TextCapitalization.sentences,
+                          minLines: 1,
+                          maxLines: 5,
+                          decoration: InputDecoration(
+                            hintText: 'Escribe un mensaje...',
+                            filled: true,
+                            fillColor: scheme.surfaceContainerHighest,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(28),
+                              borderSide: BorderSide.none,
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(28),
+                              borderSide: BorderSide.none,
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(28),
+                              borderSide: BorderSide(color: scheme.primary),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 18,
+                              vertical: 12,
+                            ),
+                          ),
+                          onSubmitted: (_) => _sendMessage(),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        onPressed: _isSending ? null : _pickAndSendImage,
+                        tooltip: 'Adjuntar imagen',
+                        icon: const Icon(Icons.image_outlined),
+                      ),
+                      IconButton.filled(
+                        onPressed: _isSending ? null : _sendMessage,
+                        icon: const Icon(Icons.send),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ],
@@ -179,7 +319,13 @@ class _ChatScreenState extends State<ChatScreen> {
 class _TextMessageBubble extends StatelessWidget {
   final ChatMessage message;
   final bool isMine;
-  const _TextMessageBubble({required this.message, required this.isMine});
+  final String? photoUrl;
+
+  const _TextMessageBubble({
+    required this.message,
+    required this.isMine,
+    required this.photoUrl,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -187,52 +333,187 @@ class _TextMessageBubble extends StatelessWidget {
     final scheme = theme.colorScheme;
     final foregroundColor = isMine ? scheme.onPrimary : scheme.onSurface;
 
-    return Align(
-      alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.75,
-        ),
-        decoration: BoxDecoration(
-          color: isMine ? scheme.primary : scheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (!isMine)
-              Text(
-                message.senderName,
-                style: theme.textTheme.labelMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            Text(
-              message.text ?? '',
-              style: theme.textTheme.bodyLarge?.copyWith(
-                color: foregroundColor,
-              ),
+    final imageUrl = message.imageUrl?.trim();
+    final bubble = Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.sizeOf(context).width * 0.72,
+      ),
+      decoration: BoxDecoration(
+        color: isMine ? scheme.primary : scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            message.senderName,
+            style: theme.textTheme.labelMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: isMine
+                  ? scheme.onPrimary.withValues(alpha: 0.8)
+                  : scheme.onSurfaceVariant,
             ),
-            Align(
-              alignment: Alignment.bottomRight,
-              child: Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  DateFormat('HH:mm').format(message.createdAt),
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: isMine
-                        ? scheme.onPrimary.withValues(alpha: 0.75)
-                        : scheme.onSurfaceVariant,
+          ),
+          if (imageUrl != null && imageUrl.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            GestureDetector(
+              onTap: () => _previewImage(context, imageUrl),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.network(
+                  imageUrl,
+                  width: math.min(
+                    280.0,
+                    MediaQuery.sizeOf(context).width * 0.62,
+                  ),
+                  height: 220,
+                  fit: BoxFit.cover,
+                  loadingBuilder: (context, child, progress) {
+                    if (progress == null) return child;
+                    return const SizedBox(
+                      width: 220,
+                      height: 180,
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  },
+                  errorBuilder: (context, error, stackTrace) => const SizedBox(
+                    width: 220,
+                    height: 180,
+                    child: Center(child: Icon(Icons.broken_image_outlined)),
                   ),
                 ),
               ),
             ),
           ],
+          if (message.text?.trim().isNotEmpty == true) ...[
+            if (imageUrl != null && imageUrl.isNotEmpty)
+              const SizedBox(height: 6),
+            Text(
+              message.text!,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: foregroundColor,
+              ),
+            ),
+          ],
+          Align(
+            alignment: Alignment.bottomRight,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                DateFormat('HH:mm').format(message.createdAt),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: isMine
+                      ? scheme.onPrimary.withValues(alpha: 0.75)
+                      : scheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    return Align(
+      alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: isMine
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
+        children: [
+          if (!isMine) ...[
+            _SenderAvatar(name: message.senderName, photoUrl: photoUrl),
+            const SizedBox(width: 8),
+          ],
+          Flexible(child: bubble),
+          if (isMine) ...[
+            const SizedBox(width: 8),
+            _SenderAvatar(name: message.senderName, photoUrl: photoUrl),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _previewImage(BuildContext context, String imageUrl) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => Dialog(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.sizeOf(context).width * 0.9,
+            maxHeight: MediaQuery.sizeOf(context).height * 0.8,
+          ),
+          child: InteractiveViewer(
+            child: Image.network(
+              imageUrl,
+              fit: BoxFit.contain,
+              loadingBuilder: (context, child, progress) {
+                if (progress == null) return child;
+                return const SizedBox(
+                  height: 300,
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              },
+              errorBuilder: (context, error, stackTrace) => const SizedBox(
+                height: 300,
+                child: Center(child: Icon(Icons.broken_image_outlined)),
+              ),
+            ),
+          ),
         ),
       ),
+    );
+  }
+}
+
+class _SenderAvatar extends StatelessWidget {
+  const _SenderAvatar({required this.name, required this.photoUrl});
+
+  final String name;
+  final String? photoUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final initials = name.trim().isEmpty
+        ? '?'
+        : name.trim().characters.first.toUpperCase();
+    final url = photoUrl?.trim();
+
+    return CircleAvatar(
+      radius: 16,
+      backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
+      child: url == null || url.isEmpty
+          ? Text(
+              initials,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSecondaryContainer,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            )
+          : ClipOval(
+              child: SizedBox.expand(
+                child: Image.network(
+                  url,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => Center(
+                    child: Text(
+                      initials,
+                      style: TextStyle(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSecondaryContainer,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
     );
   }
 }

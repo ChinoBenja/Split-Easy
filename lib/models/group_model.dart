@@ -7,6 +7,7 @@ class GroupModel {
   final String description;
   final String createdBy;
   final List<String> memberIds;
+  final List<String> invitedIds;
   final Map<String, String> memberNames; // uid -> nombre visible
   final List<String> customCategories;
   final DateTime createdAt;
@@ -17,6 +18,7 @@ class GroupModel {
     required this.description,
     required this.createdBy,
     required this.memberIds,
+    this.invitedIds = const [],
     required this.memberNames,
     this.customCategories = const [],
     required this.createdAt,
@@ -30,6 +32,7 @@ class GroupModel {
       description: data['description'] ?? '',
       createdBy: data['createdBy'] ?? '',
       memberIds: List<String>.from(data['memberIds'] ?? []),
+      invitedIds: List<String>.from(data['invitedIds'] ?? []),
       memberNames: Map<String, String>.from(data['memberNames'] ?? {}),
       customCategories: List<String>.from(data['customCategories'] ?? []),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
@@ -42,6 +45,7 @@ class GroupModel {
       'description': description,
       'createdBy': createdBy,
       'memberIds': memberIds,
+      'invitedIds': invitedIds,
       'memberNames': memberNames,
       'customCategories': customCategories,
       'createdAt': Timestamp.fromDate(createdAt),

@@ -125,7 +125,6 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
       await _firestoreService.createGroup(
         name: _nameController.text.trim(),
         description: _descriptionController.text.trim(),
-        createdBy: currentUser.uid,
         memberNames: _members.map(
           (uid, member) => MapEntry(uid, member.displayName),
         ),
@@ -274,7 +273,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                             const SizedBox(width: 10),
                             Expanded(
                               child: Text(
-                                'Integrantes',
+                                'Integrantes e invitaciones',
                                 style: theme.textTheme.titleMedium?.copyWith(
                                   fontWeight: FontWeight.w700,
                                   color: scheme.onSurface,
@@ -300,6 +299,13 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                             ),
                           ],
                         ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Las personas que agregues recibirán una invitación y deberán aceptarla para unirse.',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
                         const SizedBox(height: 14),
                         Row(
                           children: [
@@ -323,7 +329,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                               width: 52,
                               height: 52,
                               child: IconButton.filled(
-                                tooltip: 'Añadir integrante',
+                                tooltip: 'Invitar integrante',
                                 onPressed: _isAddingMember
                                     ? null
                                     : _addMemberByEmail,

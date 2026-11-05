@@ -10,7 +10,9 @@ class ChatMessage {
   final String type;
   final String senderId;
   final String senderName;
+  final String? senderPhotoUrl;
   final String? text;
+  final String? imageUrl;
   final String? expenseId;
   final String? expenseDescription;
   final String? proposalId;
@@ -21,7 +23,9 @@ class ChatMessage {
     required this.type,
     required this.senderId,
     required this.senderName,
+    this.senderPhotoUrl,
     this.text,
+    this.imageUrl,
     this.expenseId,
     this.expenseDescription,
     this.proposalId,
@@ -35,7 +39,9 @@ class ChatMessage {
       type: data['type'] ?? 'text',
       senderId: data['senderId'] ?? '',
       senderName: data['senderName'] ?? '',
+      senderPhotoUrl: data['senderPhotoUrl'] ?? data['photoUrl'],
       text: data['text'],
+      imageUrl: data['imageUrl'],
       expenseId: data['expenseId'],
       expenseDescription: data['expenseDescription'],
       proposalId: data['proposalId'],

@@ -31,10 +31,29 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
   );
   final _dateFormat = DateFormat('dd MMM yyyy', 'es');
 
+  bool _isDeletingGroup = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final user = FirebaseAuth.instance.currentUser;
+    // ignore: avoid_print
+    print(
+      'DEBUG: currentUid=${user?.uid}, groupCreatedBy=${widget.group.createdBy}',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid.trim();
+    final creatorId = widget.group.createdBy.trim();
+    final canDeleteGroup =
+        currentUserId != null &&
+        currentUserId.isNotEmpty &&
+        creatorId.isNotEmpty &&
+        creatorId == currentUserId;
 
     return Scaffold(
       backgroundColor: colors.surface,
@@ -82,6 +101,17 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
             onPressed: () =>
                 _navigateTo(context, ReportsScreen(group: widget.group)),
           ),
+          IconButton(
+            icon: const Icon(Icons.person_add_alt_1_rounded),
+            tooltip: 'Invitar integrante',
+            onPressed: _showInviteMemberDialog,
+          ),
+          if (canDeleteGroup)
+            IconButton(
+              icon: const Icon(Icons.delete_outline_rounded),
+              tooltip: 'Eliminar grupo',
+              onPressed: _isDeletingGroup ? null : _confirmDeleteGroup,
+            ),
           const SizedBox(width: 4),
         ],
       ),
@@ -221,6 +251,219 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
 
   void _navigateTo(BuildContext context, Widget screen) {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
+  }
+
+  Future<void> _showInviteMemberDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) =>
+          _InviteMemberDialog(onSubmit: _inviteMemberByEmail),
+    );
+  }
+
+  Future<bool> _inviteMemberByEmail(
+    String rawEmail,
+    BuildContext dialogContext,
+  ) async {
+    final email = rawEmail.trim();
+    if (email.isEmpty) {
+      if (!mounted || !dialogContext.mounted) return false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ingresa un correo electrónico.')),
+      );
+      return false;
+    }
+
+    try {
+      final user = await _firestoreService.findUserByEmail(email);
+      if (!mounted || !dialogContext.mounted) return false;
+
+      if (user == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('El usuario no está registrado en Split-Easy'),
+          ),
+        );
+        return false;
+      }
+
+      final uid = user['uid'];
+      if (uid is! String || uid.isEmpty) {
+        throw StateError('El perfil encontrado no tiene un UID válido.');
+      }
+      final userEmail = user['email'] as String? ?? email;
+      final memberName =
+          user['displayName'] as String? ??
+          user['name'] as String? ??
+          userEmail;
+      final invited = await _firestoreService.inviteMemberToGroup(
+        groupId: widget.group.id,
+        memberUid: uid,
+        memberName: memberName,
+      );
+
+      if (!mounted || !dialogContext.mounted) return false;
+      Navigator.of(dialogContext).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            invited
+                ? 'Invitación enviada. El usuario debe aceptarla para unirse.'
+                : 'Este usuario ya pertenece al grupo o tiene una invitación pendiente.',
+          ),
+        ),
+      );
+      return true;
+    } catch (error) {
+      if (!mounted || !dialogContext.mounted) return false;
+      debugPrint(
+        'Error al invitar integrante al grupo ${widget.group.id}: $error',
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo enviar la invitación: $error')),
+      );
+      return false;
+    }
+  }
+
+  Future<void> _confirmDeleteGroup() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Eliminar grupo'),
+        content: const Text(
+          'Esta acción eliminará permanentemente el grupo, sus gastos, '
+          'propuestas, mensajes e historial. No se puede deshacer.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Debes iniciar sesión para eliminar el grupo.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isDeletingGroup = true);
+    try {
+      await _firestoreService.deleteGroup(groupId: widget.group.id);
+      if (!mounted) return;
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    } on FirebaseException catch (error) {
+      if (!mounted) return;
+      debugPrint(
+        'Error al eliminar grupo ${widget.group.id}: '
+        'code=${error.code}, message=${error.message}',
+      );
+      final message = error.code == 'permission-denied'
+          ? 'Firestore rechazó la eliminación por permisos. '
+                'Verifica las reglas publicadas y que seas el creador '
+                '(código: ${error.code}).'
+          : 'No se pudo eliminar el grupo '
+                '(código: ${error.code}). ${error.message ?? 'Inténtalo de nuevo.'}';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } on StateError {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No se pudo eliminar el grupo. Verifica que seas su creador e inténtalo de nuevo.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isDeletingGroup = false);
+    }
+  }
+}
+
+class _InviteMemberDialog extends StatefulWidget {
+  const _InviteMemberDialog({required this.onSubmit});
+
+  final Future<bool> Function(String email, BuildContext dialogContext)
+  onSubmit;
+
+  @override
+  State<_InviteMemberDialog> createState() => _InviteMemberDialogState();
+}
+
+class _InviteMemberDialogState extends State<_InviteMemberDialog> {
+  final _emailController = TextEditingController();
+  bool _isSubmitting = false;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_isSubmitting) return;
+    if (_emailController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ingresa un correo electrónico.')),
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+    final shouldClose = await widget.onSubmit(_emailController.text, context);
+    if (!mounted || shouldClose) return;
+    setState(() => _isSubmitting = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Invitar integrante'),
+      content: TextField(
+        controller: _emailController,
+        autofocus: true,
+        keyboardType: TextInputType.emailAddress,
+        textInputAction: TextInputAction.done,
+        enabled: !_isSubmitting,
+        decoration: const InputDecoration(
+          labelText: 'Correo electrónico',
+          hintText: 'nombre@ejemplo.com',
+          prefixIcon: Icon(Icons.email_outlined),
+        ),
+        onSubmitted: (_) => _submit(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: _isSubmitting ? null : _submit,
+          child: _isSubmitting
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Enviar invitación'),
+        ),
+      ],
+    );
   }
 }
 

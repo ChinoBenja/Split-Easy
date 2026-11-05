@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/group_model.dart';
 import '../models/expense_model.dart';
@@ -28,10 +29,25 @@ class FirestoreService {
     required String uid,
     required String name,
     required String email,
+    String? photoUrl,
   }) async {
-    await _usersRef.doc(uid).set({
+    final userData = <String, dynamic>{
       'name': name,
       'email': email,
+      'updatedAt': Timestamp.now(),
+    };
+    if (photoUrl != null && photoUrl.trim().isNotEmpty) {
+      userData['photoUrl'] = photoUrl.trim();
+    }
+    await _usersRef.doc(uid).set(userData, SetOptions(merge: true));
+  }
+
+  Future<void> updateUserPhoto({
+    required String uid,
+    required String photoUrl,
+  }) async {
+    await _usersRef.doc(uid).set({
+      'photoUrl': photoUrl,
       'updatedAt': Timestamp.now(),
     }, SetOptions(merge: true));
   }
@@ -42,7 +58,29 @@ class FirestoreService {
         .limit(1)
         .get();
     if (query.docs.isEmpty) return null;
-    return {'uid': query.docs.first.id, ...query.docs.first.data() as Map};
+    return {...query.docs.first.data() as Map, 'uid': query.docs.first.id};
+  }
+
+  Future<Map<String, String>> getUserPhotoUrls(Iterable<String> userIds) async {
+    final uniqueUserIds = userIds.toSet().where((uid) => uid.isNotEmpty);
+    final snapshots = await Future.wait(
+      uniqueUserIds.map((uid) => _usersRef.doc(uid).get()),
+    );
+    final photoUrls = <String, String>{};
+
+    for (final snapshot in snapshots) {
+      final data = snapshot.data() as Map<String, dynamic>?;
+      final photoUrl = data?['photoUrl'];
+      final avatarUrl = data?['avatarUrl'];
+      final profilePhotoUrl = photoUrl is String && photoUrl.trim().isNotEmpty
+          ? photoUrl
+          : avatarUrl;
+      if (profilePhotoUrl is String && profilePhotoUrl.trim().isNotEmpty) {
+        photoUrls[snapshot.id] = profilePhotoUrl.trim();
+      }
+    }
+
+    return photoUrls;
   }
 
   // ---------------------------------------------------------------------
@@ -54,37 +92,184 @@ class FirestoreService {
         .where('memberIds', arrayContains: uid)
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snap) =>
-            snap.docs.map((doc) => GroupModel.fromFirestore(doc)).toList());
+        .map(
+          (snap) =>
+              snap.docs.map((doc) => GroupModel.fromFirestore(doc)).toList(),
+        );
+  }
+
+  Stream<List<GroupModel>> watchPendingInvitations(String uid) {
+    return _groupsRef.where('invitedIds', arrayContains: uid).snapshots().map((
+      snapshot,
+    ) {
+      final groups = snapshot.docs
+          .map((doc) => GroupModel.fromFirestore(doc))
+          .toList();
+      groups.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return groups;
+    });
   }
 
   Future<String> createGroup({
     required String name,
     required String description,
-    required String createdBy,
     required Map<String, String> memberNames,
   }) async {
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    if (currentUserId == null || currentUserId.isEmpty) {
+      throw StateError('Debes iniciar sesión para crear un grupo.');
+    }
+
+    final invitedIds = memberNames.keys
+        .where((uid) => uid != currentUserId)
+        .toList();
+    final allMemberNames = Map<String, String>.from(memberNames);
+    allMemberNames.putIfAbsent(
+      currentUserId,
+      () =>
+          FirebaseAuth.instance.currentUser?.displayName ??
+          FirebaseAuth.instance.currentUser?.email ??
+          'Usuario',
+    );
+
     final doc = await _groupsRef.add({
       'name': name,
       'description': description,
-      'createdBy': createdBy,
-      'members': memberNames.keys.toList(),
-      'memberIds': memberNames.keys.toList(),
-      'memberNames': memberNames,
+      'createdBy': currentUserId,
+      'members': [currentUserId],
+      'memberIds': [currentUserId],
+      'invitedIds': invitedIds,
+      'memberNames': allMemberNames,
       'customCategories': <String>[],
       'createdAt': Timestamp.now(),
     });
     return doc.id;
   }
 
-  Future<void> addMemberToGroup({
+  Future<void> deleteGroup({required String groupId}) async {
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    if (currentUserId == null || currentUserId.isEmpty) {
+      throw StateError('Debes iniciar sesión para eliminar un grupo.');
+    }
+
+    final groupRef = _groupsRef.doc(groupId);
+    final groupSnapshot = await groupRef.get();
+    final groupData = groupSnapshot.data() as Map<String, dynamic>?;
+    final creatorId = groupData?['createdBy'];
+    if (!groupSnapshot.exists ||
+        creatorId is! String ||
+        creatorId.trim().isEmpty ||
+        creatorId.trim() != currentUserId.trim()) {
+      throw StateError('Solo el creador puede eliminar este grupo.');
+    }
+
+    while (true) {
+      final expenses = await _expensesRef(groupId).limit(500).get();
+      if (expenses.docs.isEmpty) break;
+
+      for (final expense in expenses.docs) {
+        await _deleteCollectionInBatches(_proposalsRef(groupId, expense.id));
+      }
+      await _deleteDocumentsInBatches(
+        expenses.docs.map((expense) => expense.reference),
+      );
+    }
+
+    await _deleteCollectionInBatches(_messagesRef(groupId));
+    await _deleteCollectionInBatches(_historyRef(groupId));
+    await groupRef.delete();
+  }
+
+  Future<void> _deleteCollectionInBatches(
+    CollectionReference collection,
+  ) async {
+    while (true) {
+      final documents = await collection.limit(500).get();
+      if (documents.docs.isEmpty) return;
+      await _deleteDocumentsInBatches(
+        documents.docs.map((document) => document.reference),
+      );
+    }
+  }
+
+  Future<void> _deleteDocumentsInBatches(
+    Iterable<DocumentReference> references,
+  ) async {
+    final batch = _db.batch();
+    var count = 0;
+    for (final reference in references) {
+      batch.delete(reference);
+      count++;
+    }
+    if (count > 0) await batch.commit();
+  }
+
+  Future<bool> inviteMemberToGroup({
     required String groupId,
     required String memberUid,
     required String memberName,
   }) async {
-    await _groupsRef.doc(groupId).update({
-      'memberIds': FieldValue.arrayUnion([memberUid]),
-      'memberNames.$memberUid': memberName,
+    final groupRef = _groupsRef.doc(groupId);
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    if (currentUserId == null || currentUserId.isEmpty) {
+      throw StateError('Debes iniciar sesión para invitar integrantes.');
+    }
+    if (memberUid == currentUserId) return false;
+
+    return _db.runTransaction((transaction) async {
+      final groupSnapshot = await transaction.get(groupRef);
+      if (!groupSnapshot.exists) {
+        throw StateError('El grupo ya no existe.');
+      }
+
+      final groupData = groupSnapshot.data() as Map<String, dynamic>;
+      final memberIds = List<String>.from(groupData['memberIds'] ?? const []);
+      final invitedIds = List<String>.from(groupData['invitedIds'] ?? const []);
+      if (!memberIds.contains(currentUserId)) {
+        throw StateError('Solo los integrantes pueden invitar usuarios.');
+      }
+      if (memberIds.contains(memberUid) || invitedIds.contains(memberUid)) {
+        return false;
+      }
+
+      transaction.update(groupRef, {
+        'invitedIds': FieldValue.arrayUnion([memberUid]),
+        'memberNames.$memberUid': memberName,
+      });
+      return true;
+    });
+  }
+
+  Future<void> respondToGroupInvitation({
+    required String groupId,
+    required bool accept,
+  }) async {
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    if (currentUserId == null || currentUserId.isEmpty) {
+      throw StateError('Debes iniciar sesión para responder invitaciones.');
+    }
+
+    final groupRef = _groupsRef.doc(groupId);
+    await _db.runTransaction((transaction) async {
+      final groupSnapshot = await transaction.get(groupRef);
+      if (!groupSnapshot.exists) {
+        throw StateError('El grupo ya no existe.');
+      }
+
+      final groupData = groupSnapshot.data() as Map<String, dynamic>;
+      final invitedIds = List<String>.from(groupData['invitedIds'] ?? const []);
+      if (!invitedIds.contains(currentUserId)) {
+        throw StateError('Esta invitación ya no está pendiente.');
+      }
+
+      final updates = <String, dynamic>{
+        'invitedIds': FieldValue.arrayRemove([currentUserId]),
+      };
+      if (accept) {
+        updates['memberIds'] = FieldValue.arrayUnion([currentUserId]);
+        updates['members'] = FieldValue.arrayUnion([currentUserId]);
+      }
+      transaction.update(groupRef, updates);
     });
   }
 
@@ -94,6 +279,7 @@ class FirestoreService {
   }) async {
     await _groupsRef.doc(groupId).update({
       'memberIds': FieldValue.arrayRemove([memberUid]),
+      'members': FieldValue.arrayRemove([memberUid]),
       'memberNames.$memberUid': FieldValue.delete(),
     });
   }
@@ -112,13 +298,17 @@ class FirestoreService {
     return _expensesRef(groupId)
         .orderBy('date', descending: true)
         .snapshots()
-        .map((snap) =>
-            snap.docs.map((doc) => ExpenseModel.fromFirestore(doc)).toList());
+        .map(
+          (snap) =>
+              snap.docs.map((doc) => ExpenseModel.fromFirestore(doc)).toList(),
+        );
   }
 
   Stream<ExpenseModel?> watchExpense(String groupId, String expenseId) {
-    return _expensesRef(groupId).doc(expenseId).snapshots().map(
-        (doc) => doc.exists ? ExpenseModel.fromFirestore(doc) : null);
+    return _expensesRef(groupId)
+        .doc(expenseId)
+        .snapshots()
+        .map((doc) => doc.exists ? ExpenseModel.fromFirestore(doc) : null);
   }
 
   /// [payments]: uid -> monto pagado. [participantShares]: uid -> monto
@@ -179,7 +369,8 @@ class FirestoreService {
         action: 'deleted_free',
         performedBy: performedBy ?? '',
         performedByName: performedByName ?? '',
-        details: details ?? 'Eliminado directamente desde la pantalla de detalle.',
+        details:
+            details ?? 'Eliminado directamente desde la pantalla de detalle.',
       );
     }
   }
@@ -204,7 +395,8 @@ class FirestoreService {
     );
     await sendSystemMessage(
       groupId: groupId,
-      text: '🗑️ $performedByName eliminó "${expense.description}" (ya no tenía deudas pendientes).',
+      text:
+          '🗑️ $performedByName eliminó "${expense.description}" (ya no tenía deudas pendientes).',
     );
   }
 
@@ -274,7 +466,8 @@ class FirestoreService {
     );
     await sendSystemMessage(
       groupId: groupId,
-      text: '✅ $confirmedByName confirmó el pago de $uidName en "$expenseDescription".',
+      text:
+          '✅ $confirmedByName confirmó el pago de $uidName en "$expenseDescription".',
     );
   }
 
@@ -282,18 +475,28 @@ class FirestoreService {
   // PROPUESTAS DE EDICIÓN / ELIMINACIÓN (requieren consenso de TODOS)
   // ---------------------------------------------------------------------
 
-  Stream<List<ExpenseProposal>> watchProposals(String groupId, String expenseId) {
+  Stream<List<ExpenseProposal>> watchProposals(
+    String groupId,
+    String expenseId,
+  ) {
     return _proposalsRef(groupId, expenseId)
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snap) =>
-            snap.docs.map((d) => ExpenseProposal.fromFirestore(d)).toList());
+        .map(
+          (snap) =>
+              snap.docs.map((d) => ExpenseProposal.fromFirestore(d)).toList(),
+        );
   }
 
   Stream<ExpenseProposal?> watchProposal(
-      String groupId, String expenseId, String proposalId) {
-    return _proposalsRef(groupId, expenseId).doc(proposalId).snapshots().map(
-        (doc) => doc.exists ? ExpenseProposal.fromFirestore(doc) : null);
+    String groupId,
+    String expenseId,
+    String proposalId,
+  ) {
+    return _proposalsRef(groupId, expenseId)
+        .doc(proposalId)
+        .snapshots()
+        .map((doc) => doc.exists ? ExpenseProposal.fromFirestore(doc) : null);
   }
 
   Future<void> proposeExpenseEdit({
@@ -413,8 +616,9 @@ class FirestoreService {
         if (response == 'rejected') {
           status = 'rejected';
         } else {
-          final allAccepted =
-              groupMemberIds.every((m) => responses[m] == 'accepted');
+          final allAccepted = groupMemberIds.every(
+            (m) => responses[m] == 'accepted',
+          );
           if (allAccepted) status = 'approved';
         }
       }
@@ -459,7 +663,10 @@ class FirestoreService {
     return _historyRef(groupId)
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snap) => snap.docs.map((d) => HistoryEntry.fromFirestore(d)).toList());
+        .map(
+          (snap) =>
+              snap.docs.map((d) => HistoryEntry.fromFirestore(d)).toList(),
+        );
   }
 
   Future<void> _logHistory({
@@ -490,23 +697,34 @@ class FirestoreService {
     return _messagesRef(groupId)
         .orderBy('timestamp', descending: true)
         .snapshots()
-        .map((snap) => snap.docs.map((d) => ChatMessage.fromFirestore(d)).toList());
+        .map(
+          (snap) => snap.docs.map((d) => ChatMessage.fromFirestore(d)).toList(),
+        );
   }
 
   Future<void> sendTextMessage({
     required String groupId,
     required String senderId,
     required String senderName,
-    required String text,
+    String? text,
+    String? imageUrl,
+    String? senderPhotoUrl,
   }) async {
-    await _messagesRef(groupId).add({
+    final message = <String, dynamic>{
       'type': 'text',
       'senderId': senderId,
       'senderName': senderName,
-      'text': text,
       'timestamp': FieldValue.serverTimestamp(),
       'createdAt': Timestamp.now(),
-    });
+    };
+    if (text != null && text.trim().isNotEmpty) message['text'] = text.trim();
+    if (imageUrl != null && imageUrl.trim().isNotEmpty) {
+      message['imageUrl'] = imageUrl.trim();
+    }
+    if (senderPhotoUrl != null && senderPhotoUrl.trim().isNotEmpty) {
+      message['senderPhotoUrl'] = senderPhotoUrl.trim();
+    }
+    await _messagesRef(groupId).add(message);
   }
 
   Future<void> sendSystemMessage({
@@ -537,8 +755,10 @@ class FirestoreService {
       text = '📊 Balance actualizado: ¡todos están a mano en este grupo!';
     } else {
       final lines = settlements
-          .map((s) =>
-              '• ${s.fromName} le debe ${_formatCurrency(s.amount)} a ${s.toName}')
+          .map(
+            (s) =>
+                '• ${s.fromName} le debe ${_formatCurrency(s.amount)} a ${s.toName}',
+          )
           .join('\n');
       text = '📊 Balance actualizado tras este movimiento:\n$lines';
     }
@@ -602,10 +822,10 @@ class FirestoreService {
     final List<SettlementTransaction> transactions = [];
 
     final Map<String, double> pendingDebt = {
-      for (var d in debtors) d.uid: -d.balance
+      for (var d in debtors) d.uid: -d.balance,
     };
     final Map<String, double> pendingCredit = {
-      for (var c in creditors) c.uid: c.balance
+      for (var c in creditors) c.uid: c.balance,
     };
 
     int i = 0, j = 0;
@@ -618,13 +838,15 @@ class FirestoreService {
       ].reduce((a, b) => a < b ? a : b);
 
       if (amount > 0.01) {
-        transactions.add(SettlementTransaction(
+        transactions.add(
+          SettlementTransaction(
             fromUid: debtor.uid,
             fromName: debtor.name,
             toUid: creditor.uid,
             toName: creditor.name,
             amount: double.parse(amount.toStringAsFixed(2)),
-        ));
+          ),
+        );
       }
 
       pendingDebt[debtor.uid] = pendingDebt[debtor.uid]! - amount;
