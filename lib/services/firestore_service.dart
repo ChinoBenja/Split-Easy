@@ -1,6 +1,9 @@
+import 'dart:convert';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/group_model.dart';
+import '../models/user_profile_model.dart';
 import '../models/expense_model.dart';
 import '../models/expense_proposal_model.dart';
 import '../models/message_model.dart';
@@ -44,12 +47,25 @@ class FirestoreService {
 
   Future<void> updateUserPhoto({
     required String uid,
-    required String photoUrl,
+    required List<int> imageBytes,
+    required String contentType,
   }) async {
-    await _usersRef.doc(uid).set({
-      'photoUrl': photoUrl,
-      'updatedAt': Timestamp.now(),
-    }, SetOptions(merge: true));
+    await _usersRef
+        .doc(uid)
+        .set({
+          'photoBase64': base64Encode(imageBytes),
+          'photoContentType': contentType,
+          'photoUrl': FieldValue.delete(),
+          'avatarUrl': FieldValue.delete(),
+          'updatedAt': Timestamp.now(),
+        }, SetOptions(merge: true))
+        .timeout(const Duration(seconds: 30));
+  }
+
+  Future<String?> getUserPhoto(String uid) async {
+    final snapshot = await _usersRef.doc(uid).get();
+    final data = snapshot.data() as Map<String, dynamic>?;
+    return _photoSource(data);
   }
 
   Future<Map<String, dynamic>?> findUserByEmail(String email) async {
@@ -58,29 +74,73 @@ class FirestoreService {
         .limit(1)
         .get();
     if (query.docs.isEmpty) return null;
-    return {...query.docs.first.data() as Map, 'uid': query.docs.first.id};
+    final userData = query.docs.first.data() as Map<String, dynamic>;
+    return {
+      ...userData,
+      'uid': query.docs.first.id,
+      'photoSource': _photoSource(userData),
+    };
   }
 
   Future<Map<String, String>> getUserPhotoUrls(Iterable<String> userIds) async {
+    final profiles = await getUserProfiles(userIds);
+    final photoUrls = <String, String>{};
+    for (final profile in profiles.values) {
+      final photoSource = profile.photoSource;
+      if (photoSource != null && photoSource.isNotEmpty) {
+        photoUrls[profile.uid] = photoSource;
+      }
+    }
+    return photoUrls;
+  }
+
+  Future<Map<String, UserProfile>> getUserProfiles(
+    Iterable<String> userIds,
+  ) async {
     final uniqueUserIds = userIds.toSet().where((uid) => uid.isNotEmpty);
     final snapshots = await Future.wait(
       uniqueUserIds.map((uid) => _usersRef.doc(uid).get()),
     );
-    final photoUrls = <String, String>{};
+    return {
+      for (final snapshot in snapshots)
+        if (snapshot.exists)
+          snapshot.id: _userProfileFromData(
+            snapshot.id,
+            snapshot.data() as Map<String, dynamic>,
+          ),
+    };
+  }
 
-    for (final snapshot in snapshots) {
-      final data = snapshot.data() as Map<String, dynamic>?;
-      final photoUrl = data?['photoUrl'];
-      final avatarUrl = data?['avatarUrl'];
-      final profilePhotoUrl = photoUrl is String && photoUrl.trim().isNotEmpty
-          ? photoUrl
-          : avatarUrl;
-      if (profilePhotoUrl is String && profilePhotoUrl.trim().isNotEmpty) {
-        photoUrls[snapshot.id] = profilePhotoUrl.trim();
-      }
+  UserProfile _userProfileFromData(String uid, Map<String, dynamic> data) {
+    final name = data['name'];
+    final email = data['email'];
+    return UserProfile(
+      uid: uid,
+      name: name is String ? name.trim() : '',
+      email: email is String ? email.trim() : '',
+      photoSource: _photoSource(data),
+    );
+  }
+
+  String? _photoSource(Map<String, dynamic>? data) {
+    final photoBase64 = data?['photoBase64'];
+    if (photoBase64 is String && photoBase64.isNotEmpty) {
+      final contentType = data?['photoContentType'];
+      final safeContentType =
+          contentType is String && contentType.startsWith('image/')
+          ? contentType
+          : 'image/jpeg';
+      return 'data:$safeContentType;base64,$photoBase64';
     }
 
-    return photoUrls;
+    final photoUrl = data?['photoUrl'];
+    final avatarUrl = data?['avatarUrl'];
+    final legacyPhotoUrl = photoUrl is String && photoUrl.trim().isNotEmpty
+        ? photoUrl
+        : avatarUrl;
+    return legacyPhotoUrl is String && legacyPhotoUrl.trim().isNotEmpty
+        ? legacyPhotoUrl.trim()
+        : null;
   }
 
   // ---------------------------------------------------------------------
@@ -114,6 +174,8 @@ class FirestoreService {
     required String name,
     required String description,
     required Map<String, String> memberNames,
+    List<int>? photoBytes,
+    String photoContentType = 'image/jpeg',
   }) async {
     final currentUserId = FirebaseAuth.instance.currentUser?.uid;
     if (currentUserId == null || currentUserId.isEmpty) {
@@ -132,7 +194,11 @@ class FirestoreService {
           'Usuario',
     );
 
-    final doc = await _groupsRef.add({
+    if (photoBytes != null && photoBytes.length > 120 * 1024) {
+      throw StateError('La foto del grupo no puede superar los 120 KB.');
+    }
+
+    final groupData = <String, dynamic>{
       'name': name,
       'description': description,
       'createdBy': currentUserId,
@@ -142,7 +208,12 @@ class FirestoreService {
       'memberNames': allMemberNames,
       'customCategories': <String>[],
       'createdAt': Timestamp.now(),
-    });
+    };
+    if (photoBytes != null) {
+      groupData['photoBase64'] = base64Encode(photoBytes);
+      groupData['photoContentType'] = photoContentType;
+    }
+    final doc = await _groupsRef.add(groupData);
     return doc.id;
   }
 

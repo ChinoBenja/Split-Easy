@@ -50,6 +50,8 @@ service cloud.firestore {
           (
             isGroupMember(groupId)
             && request.resource.data.createdBy == resource.data.createdBy
+            && !request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['photoBase64', 'photoContentType'])
           )
           || isInvitationResponse()
         );

@@ -9,6 +9,7 @@ import '../../models/expense_proposal_model.dart';
 import '../../models/group_model.dart';
 import '../../models/message_model.dart';
 import '../../services/firestore_service.dart';
+import '../widgets/profile_photo_image.dart';
 
 class ChatScreen extends StatefulWidget {
   final GroupModel group;
@@ -496,10 +497,9 @@ class _SenderAvatar extends StatelessWidget {
             )
           : ClipOval(
               child: SizedBox.expand(
-                child: Image.network(
-                  url,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Center(
+                child: ProfilePhotoImage(
+                  source: url,
+                  fallback: Center(
                     child: Text(
                       initials,
                       style: TextStyle(
@@ -511,6 +511,7 @@ class _SenderAvatar extends StatelessWidget {
                       ),
                     ),
                   ),
+                  fit: BoxFit.cover,
                 ),
               ),
             ),

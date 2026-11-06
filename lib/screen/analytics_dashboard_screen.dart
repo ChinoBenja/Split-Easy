@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../../models/expense_model.dart';
 import '../../models/group_model.dart';
 import '../../services/firestore_service.dart';
+import '../widgets/person_avatar.dart';
 
 class AnalyticsDashboardScreen extends StatefulWidget {
   const AnalyticsDashboardScreen({super.key, required this.group});
@@ -26,6 +27,8 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen> {
     decimalDigits: 0,
   );
   int _touchedCategoryIndex = -1;
+  late final Future<Map<String, String>> _memberPhotoUrls = _firestoreService
+      .getUserPhotoUrls(widget.group.memberIds);
 
   @override
   Widget build(BuildContext context) {
@@ -189,8 +192,9 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen> {
                                 subtitle: 'Total aportado por cada pagador',
                                 icon: Icons.bar_chart_rounded,
                                 child: _MemberContributionCard(
-                                  contributions:
-                                      analytics.memberContributions,
+                                  contributions: analytics.memberContributions,
+                                  memberNames: widget.group.memberNames,
+                                  memberPhotoUrls: _memberPhotoUrls,
                                   currencyFormat: _currencyFormat,
                                 ),
                               ),
@@ -219,6 +223,8 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen> {
                           icon: Icons.bar_chart_rounded,
                           child: _MemberContributionCard(
                             contributions: analytics.memberContributions,
+                            memberNames: widget.group.memberNames,
+                            memberPhotoUrls: _memberPhotoUrls,
                             currencyFormat: _currencyFormat,
                           ),
                         ),
@@ -719,10 +725,14 @@ class _CategoryChartCard extends StatelessWidget {
 class _MemberContributionCard extends StatelessWidget {
   const _MemberContributionCard({
     required this.contributions,
+    required this.memberNames,
+    required this.memberPhotoUrls,
     required this.currencyFormat,
   });
 
   final Map<String, double> contributions;
+  final Map<String, String> memberNames;
+  final Future<Map<String, String>> memberPhotoUrls;
   final NumberFormat currencyFormat;
 
   @override
@@ -766,7 +776,7 @@ class _MemberContributionCard extends StatelessWidget {
                             getTooltipItem: (group, groupIndex, rod, rodIndex) {
                               final entry = entries[group.x];
                               return BarTooltipItem(
-                                '${entry.key}\n${currencyFormat.format(entry.value)}',
+                                '${memberNames[entry.key] ?? 'Usuario'}\n${currencyFormat.format(entry.value)}',
                                 theme.textTheme.labelMedium!.copyWith(
                                   color: colors.onInverseSurface,
                                   fontWeight: FontWeight.w700,
@@ -818,7 +828,10 @@ class _MemberContributionCard extends StatelessWidget {
                                 return Padding(
                                   padding: const EdgeInsets.only(top: 8),
                                   child: Text(
-                                    _shortName(entries[index].key),
+                                    _shortName(
+                                      memberNames[entries[index].key] ??
+                                          'Usuario',
+                                    ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: theme.textTheme.labelSmall?.copyWith(
@@ -863,27 +876,20 @@ class _MemberContributionCard extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(vertical: 4),
                       child: Row(
                         children: [
-                          CircleAvatar(
-                            radius: 13,
-                            backgroundColor: colors.primaryContainer,
-                            child: Text(
-                              entry.key.trim().isEmpty
-                                  ? '?'
-                                  : entry.key
-                                        .trim()
-                                        .characters
-                                        .first
-                                        .toUpperCase(),
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: colors.onPrimaryContainer,
-                                fontWeight: FontWeight.w700,
-                              ),
+                          FutureBuilder<Map<String, String>>(
+                            future: memberPhotoUrls,
+                            builder: (context, snapshot) => PersonAvatar(
+                              name: memberNames[entry.key] ?? 'Usuario',
+                              photoSource: snapshot.data?[entry.key],
+                              radius: 13,
+                              backgroundColor: colors.primaryContainer,
+                              foregroundColor: colors.onPrimaryContainer,
                             ),
                           ),
                           const SizedBox(width: 9),
                           Expanded(
                             child: Text(
-                              entry.key,
+                              memberNames[entry.key] ?? 'Usuario',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: theme.textTheme.bodySmall,

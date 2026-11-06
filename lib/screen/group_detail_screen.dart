@@ -12,6 +12,8 @@ import 'expense_detail_screen.dart';
 import 'history_screen.dart';
 import 'analytics_dashboard_screen.dart';
 import 'reports_screen.dart';
+import 'group_members_screen.dart';
+import '../widgets/profile_photo_image.dart';
 
 class GroupDetailScreen extends StatefulWidget {
   final GroupModel group;
@@ -60,12 +62,53 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
       appBar: AppBar(
         backgroundColor: colors.surface,
         surfaceTintColor: Colors.transparent,
-        title: Text(
-          widget.group.name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w700,
+        title: Tooltip(
+          message: 'Ver integrantes del grupo',
+          child: InkWell(
+            onTap: () =>
+                _navigateTo(context, GroupMembersScreen(group: widget.group)),
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 17,
+                    backgroundColor: colors.primaryContainer,
+                    child: widget.group.photoSource == null
+                        ? Icon(
+                            Icons.groups_rounded,
+                            size: 19,
+                            color: colors.onPrimaryContainer,
+                          )
+                        : ClipOval(
+                            child: SizedBox.expand(
+                              child: ProfilePhotoImage(
+                                source: widget.group.photoSource!,
+                                fallback: Icon(
+                                  Icons.groups_rounded,
+                                  size: 19,
+                                  color: colors.onPrimaryContainer,
+                                ),
+                              ),
+                            ),
+                          ),
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      widget.group.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const Icon(Icons.expand_more_rounded, size: 20),
+                ],
+              ),
+            ),
           ),
         ),
         actions: [
@@ -100,11 +143,6 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
             tooltip: 'Reportes y exportación PDF',
             onPressed: () =>
                 _navigateTo(context, ReportsScreen(group: widget.group)),
-          ),
-          IconButton(
-            icon: const Icon(Icons.person_add_alt_1_rounded),
-            tooltip: 'Invitar integrante',
-            onPressed: _showInviteMemberDialog,
           ),
           if (canDeleteGroup)
             IconButton(
@@ -237,14 +275,30 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: colors.primary,
-        foregroundColor: colors.onPrimary,
-        elevation: 3,
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Agregar gasto'),
-        onPressed: () =>
-            _navigateTo(context, AddExpenseScreen(group: widget.group)),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          FloatingActionButton.small(
+            heroTag: 'invite-member',
+            tooltip: 'Invitar integrante',
+            backgroundColor: colors.secondaryContainer,
+            foregroundColor: colors.onSecondaryContainer,
+            onPressed: _showInviteMemberDialog,
+            child: const Icon(Icons.person_add_alt_1_rounded),
+          ),
+          const SizedBox(height: 12),
+          FloatingActionButton.extended(
+            heroTag: 'add-expense',
+            backgroundColor: colors.primary,
+            foregroundColor: colors.onPrimary,
+            elevation: 3,
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('Agregar gasto'),
+            onPressed: () =>
+                _navigateTo(context, AddExpenseScreen(group: widget.group)),
+          ),
+        ],
       ),
     );
   }

@@ -6,6 +6,7 @@ import '../../models/group_model.dart';
 import '../../services/firestore_service.dart';
 import 'chat_screen.dart';
 import 'edit_expense_screen.dart';
+import '../widgets/person_avatar.dart';
 
 /// Detalle completo de un gasto y su balance individual por participante.
 class ExpenseDetailScreen extends StatelessWidget {
@@ -21,6 +22,7 @@ class ExpenseDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final firestoreService = FirestoreService();
+    final memberPhotoUrls = firestoreService.getUserPhotoUrls(group.memberIds);
     final currencyFormat = NumberFormat.currency(
       locale: 'es_CL',
       symbol: '\$',
@@ -109,10 +111,12 @@ class ExpenseDetailScreen extends StatelessWidget {
                       children: current.payments.entries.map((entry) {
                         final name = current.payerNames[entry.key] ?? 'Usuario';
                         return _PersonAmountTile(
+                          uid: entry.key,
                           name: name,
                           subtitle: 'Aporte al gasto',
                           amount: currencyFormat.format(entry.value),
                           icon: Icons.north_east_rounded,
+                          memberPhotoUrls: memberPhotoUrls,
                         );
                       }).toList(),
                     ),
@@ -155,6 +159,7 @@ class ExpenseDetailScreen extends StatelessWidget {
                                   : 'Está a mano';
 
                               return _PersonAmountTile(
+                                uid: uid,
                                 name: name,
                                 subtitle:
                                     'Cuota: ${currencyFormat.format(share)}',
@@ -165,6 +170,7 @@ class ExpenseDetailScreen extends StatelessWidget {
                                     : isDebt
                                     ? Icons.south_west_rounded
                                     : Icons.check_rounded,
+                                memberPhotoUrls: memberPhotoUrls,
                               );
                             }).toList(),
                           ),
@@ -418,40 +424,39 @@ class _DetailSection extends StatelessWidget {
 
 class _PersonAmountTile extends StatelessWidget {
   const _PersonAmountTile({
+    required this.uid,
     required this.name,
     required this.subtitle,
     required this.amount,
     required this.icon,
+    required this.memberPhotoUrls,
     this.amountColor,
   });
 
+  final String uid;
   final String name;
   final String subtitle;
   final String amount;
   final IconData icon;
+  final Future<Map<String, String>> memberPhotoUrls;
   final Color? amountColor;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final avatarText = name.trim().isEmpty
-        ? '?'
-        : name.trim().characters.first.toUpperCase();
-
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 20,
-            backgroundColor: colors.secondaryContainer,
-            child: Text(
-              avatarText,
-              style: TextStyle(
-                color: colors.onSecondaryContainer,
-                fontWeight: FontWeight.w700,
-              ),
+          FutureBuilder<Map<String, String>>(
+            future: memberPhotoUrls,
+            builder: (context, snapshot) => PersonAvatar(
+              name: name,
+              photoSource: snapshot.data?[uid],
+              radius: 20,
+              backgroundColor: colors.secondaryContainer,
+              foregroundColor: colors.onSecondaryContainer,
             ),
           ),
           const SizedBox(width: 12),

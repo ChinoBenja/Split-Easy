@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "spliteasy-assistant",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-05",
+  "vars": {
+    "FIREBASE_PROJECT_ID": "spliteasy-5e07e"
+  },
+  "ai": {
+    "binding": "AI"
+  }
+}

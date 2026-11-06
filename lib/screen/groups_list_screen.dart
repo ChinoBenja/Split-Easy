@@ -6,9 +6,11 @@ import 'package:intl/intl.dart';
 import '../../models/expense_model.dart';
 import '../../models/group_model.dart';
 import '../../services/firestore_service.dart';
+import 'assistant_chat_screen.dart';
 import 'create_group_screen.dart';
 import 'group_detail_screen.dart';
 import 'profile_screen.dart';
+import '../widgets/profile_photo_image.dart';
 
 /// Pantalla principal tras el login: lista de grupos del usuario (H.4)
 class GroupsListScreen extends StatefulWidget {
@@ -23,12 +25,35 @@ class _GroupsListScreenState extends State<GroupsListScreen> {
   final _searchController = TextEditingController();
   Stream<List<GroupModel>>? _groupsStream;
   String? _streamUid;
+  String? _photoUid;
+  Future<String?>? _userPhotoFuture;
   String _searchQuery = '';
 
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<String?> _loadUserPhoto(String uid) {
+    if (_photoUid != uid || _userPhotoFuture == null) {
+      _photoUid = uid;
+      _userPhotoFuture = _firestoreService.getUserPhoto(uid);
+    }
+    return _userPhotoFuture!;
+  }
+
+  Future<void> _openProfile() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const ProfileScreen()));
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || !mounted) return;
+    setState(() {
+      _photoUid = null;
+      _userPhotoFuture = null;
+      _loadUserPhoto(uid);
+    });
   }
 
   @override
@@ -84,22 +109,37 @@ class _GroupsListScreenState extends State<GroupsListScreen> {
         actions: [
           PopupMenuButton<String>(
             tooltip: 'Perfil y configuración',
-            icon: CircleAvatar(
-              radius: 17,
-              backgroundColor: colors.secondaryContainer,
-              child: Icon(
-                Icons.person_outline_rounded,
-                size: 20,
-                color: colors.onSecondaryContainer,
-              ),
+            icon: FutureBuilder<String?>(
+              future: _loadUserPhoto(uid),
+              builder: (context, snapshot) {
+                final photoSource = snapshot.data;
+                return CircleAvatar(
+                  radius: 17,
+                  backgroundColor: colors.secondaryContainer,
+                  child: photoSource == null || photoSource.isEmpty
+                      ? Icon(
+                          Icons.person_outline_rounded,
+                          size: 20,
+                          color: colors.onSecondaryContainer,
+                        )
+                      : ClipOval(
+                          child: SizedBox.expand(
+                            child: ProfilePhotoImage(
+                              source: photoSource,
+                              fallback: Icon(
+                                Icons.person_outline_rounded,
+                                size: 20,
+                                color: colors.onSecondaryContainer,
+                              ),
+                            ),
+                          ),
+                        ),
+                );
+              },
             ),
             onSelected: (value) {
               if (value == 'profile') {
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const ProfileScreen(),
-                  ),
-                );
+                _openProfile();
               } else if (value == 'sign_out') {
                 FirebaseAuth.instance.signOut();
               }
@@ -197,11 +237,34 @@ class _GroupsListScreenState extends State<GroupsListScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Nuevo grupo'),
-        onPressed: _openCreateGroup,
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          FloatingActionButton(
+            heroTag: 'assistant-chat',
+            tooltip: 'Asistente IA',
+            backgroundColor: colors.tertiaryContainer,
+            foregroundColor: colors.onTertiaryContainer,
+            elevation: 4,
+            onPressed: _openAssistant,
+            child: const Icon(Icons.auto_awesome_rounded),
+          ),
+          const SizedBox(height: 12),
+          FloatingActionButton.extended(
+            heroTag: 'create-group',
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('Nuevo grupo'),
+            onPressed: _openCreateGroup,
+          ),
+        ],
       ),
+    );
+  }
+
+  void _openAssistant() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const AssistantChatScreen()),
     );
   }
 
@@ -862,13 +925,28 @@ class _GroupCard extends StatelessWidget {
               CircleAvatar(
                 radius: 25,
                 backgroundColor: groupColor.withValues(alpha: 0.13),
-                child: Text(
-                  initials,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    color: groupColor,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
+                child: group.photoSource == null
+                    ? Text(
+                        initials,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: groupColor,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      )
+                    : ClipOval(
+                        child: SizedBox.expand(
+                          child: ProfilePhotoImage(
+                            source: group.photoSource!,
+                            fallback: Text(
+                              initials,
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                color: groupColor,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
               ),
               const SizedBox(width: 13),
               Expanded(

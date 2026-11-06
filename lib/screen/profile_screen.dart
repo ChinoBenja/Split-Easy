@@ -1,8 +1,11 @@
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../services/firestore_service.dart';
+import '../widgets/profile_photo_image.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -32,10 +35,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
         false;
   }
 
+  bool get _supportsLostPhotoRecovery =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
   @override
   void initState() {
     super.initState();
     _photoUrl = FirebaseAuth.instance.currentUser?.photoURL;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeProfilePhoto();
+    });
   }
 
   @override
@@ -134,48 +143,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     setState(() => _isLoading = true);
     try {
-      final image = await ImagePicker().pickImage(
+      final picker = ImagePicker();
+      var image = await picker.pickImage(
         source: ImageSource.gallery,
-        maxWidth: 1600,
-        maxHeight: 1600,
-        imageQuality: 85,
+        maxWidth: 320,
+        maxHeight: 320,
+        imageQuality: 75,
       );
-      if (image == null) return;
-
-      final bytes = await image.readAsBytes();
-      if (bytes.length > 10 * 1024 * 1024) {
-        throw StateError('La imagen no puede superar los 10 MB.');
+      if (image == null) {
+        if (!_supportsLostPhotoRecovery) return;
+        final lostData = await picker.retrieveLostData();
+        if (lostData.exception != null) throw lostData.exception!;
+        final files = lostData.files;
+        if (files == null || files.isEmpty) {
+          _showSnackBar(
+            'No se recibió la imagen seleccionada. Inténtalo nuevamente.',
+            isError: true,
+          );
+          return;
+        }
+        image = files.first;
       }
 
-      final extension = image.name.contains('.')
-          ? image.name.split('.').last.toLowerCase()
-          : 'jpg';
-      final safeExtension = RegExp(r'^[a-z0-9]+$').hasMatch(extension)
-          ? extension
-          : 'jpg';
-      final contentType = image.mimeType?.startsWith('image/') == true
-          ? image.mimeType!
-          : 'image/$safeExtension';
-      final storageRef = FirebaseStorage.instance.ref().child(
-        'profile_images/${user.uid}.$safeExtension',
-      );
-      await storageRef.putData(
-        bytes,
-        SettableMetadata(contentType: contentType),
-      );
-      final downloadUrl = await storageRef.getDownloadURL();
-
-      await user.updatePhotoURL(downloadUrl);
-      await _firestoreService.updateUserPhoto(
-        uid: user.uid,
-        photoUrl: downloadUrl,
-      );
-      await user.reload();
-      await NetworkImage(downloadUrl).evict();
-
-      if (!mounted) return;
-      setState(() => _photoUrl = downloadUrl);
-      _showSnackBar('La foto de perfil se actualizó correctamente.');
+      await _uploadProfilePhoto(image, user);
     } on FirebaseAuthException catch (error) {
       if (!mounted) return;
       _showSnackBar(
@@ -191,6 +181,74 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _restoreLostProfilePhoto() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || !mounted) return;
+
+    try {
+      final lostData = await ImagePicker().retrieveLostData();
+      if (lostData.isEmpty) return;
+      if (lostData.exception != null) throw lostData.exception!;
+      final files = lostData.files;
+      if (files == null || files.isEmpty) {
+        throw StateError('No se pudo recuperar la imagen seleccionada.');
+      }
+
+      setState(() => _isLoading = true);
+      await _uploadProfilePhoto(files.first, user);
+    } catch (error) {
+      if (!mounted) return;
+      _showSnackBar(
+        'No se pudo actualizar la foto de perfil: $error',
+        isError: true,
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _loadProfilePhoto() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    try {
+      final photoSource = await _firestoreService.getUserPhoto(user.uid);
+      if (!mounted || photoSource == null) return;
+      setState(() => _photoUrl = photoSource);
+    } catch (error) {
+      debugPrint('Error al cargar la foto del perfil ${user.uid}: $error');
+      if (mounted) {
+        _showSnackBar('No se pudo cargar la foto de perfil.', isError: true);
+      }
+    }
+  }
+
+  Future<void> _initializeProfilePhoto() async {
+    if (_supportsLostPhotoRecovery) await _restoreLostProfilePhoto();
+    await _loadProfilePhoto();
+  }
+
+  Future<void> _uploadProfilePhoto(XFile image, User user) async {
+    final bytes = await image.readAsBytes();
+    if (bytes.length > 256 * 1024) {
+      throw StateError(
+        'La imagen optimizada supera los 256 KB. Elige otra foto.',
+      );
+    }
+
+    await _firestoreService.updateUserPhoto(
+      uid: user.uid,
+      imageBytes: bytes,
+      contentType: image.mimeType?.startsWith('image/') == true
+          ? image.mimeType!
+          : 'image/jpeg',
+    );
+
+    if (!mounted) return;
+    setState(() => _photoUrl = 'data:image/jpeg;base64,${base64Encode(bytes)}');
+    _showSnackBar('La foto de perfil se actualizó correctamente.');
   }
 
   void _showSnackBar(String message, {bool isError = false}) {
@@ -244,20 +302,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     child: SizedBox.expand(
                                       child:
                                           _photoUrl?.trim().isNotEmpty == true
-                                          ? Image.network(
-                                              _photoUrl!,
+                                          ? ProfilePhotoImage(
+                                              source: _photoUrl!,
+                                              fallback: Icon(
+                                                Icons.person_rounded,
+                                                size: 38,
+                                                color:
+                                                    colors.onPrimaryContainer,
+                                              ),
                                               fit: BoxFit.cover,
-                                              errorBuilder:
-                                                  (
-                                                    context,
-                                                    error,
-                                                    stackTrace,
-                                                  ) => Icon(
-                                                    Icons.person_rounded,
-                                                    size: 38,
-                                                    color: colors
-                                                        .onPrimaryContainer,
-                                                  ),
                                             )
                                           : Icon(
                                               Icons.person_rounded,

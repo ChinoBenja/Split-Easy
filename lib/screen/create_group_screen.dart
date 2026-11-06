@@ -1,17 +1,25 @@
+import 'dart:convert';
+
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../services/firestore_service.dart';
+import '../widgets/person_avatar.dart';
+import '../widgets/profile_photo_image.dart';
 
 class _GroupMember {
   const _GroupMember({
     required this.uid,
     required this.email,
     required this.displayName,
+    this.photoSource,
   });
 
   final String uid;
   final String email;
   final String displayName;
+  final String? photoSource;
 }
 
 /// Pantalla de creación de grupos (H.4). Permite agregar integrantes
@@ -34,6 +42,9 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
   final Map<String, _GroupMember> _members = {};
   bool _isLoading = false;
   bool _isAddingMember = false;
+  bool _isPickingGroupPhoto = false;
+  List<int>? _groupPhotoBytes;
+  String _groupPhotoContentType = 'image/jpeg';
   String? _errorMessage;
 
   @override
@@ -45,8 +56,111 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
         uid: user.uid,
         email: user.email ?? '',
         displayName: user.displayName ?? user.email ?? 'Yo',
+        photoSource: user.photoURL,
+      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadCurrentMemberPhoto(user.uid);
+      });
+    }
+    if (_supportsLostPhotoRecovery) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _restoreLostGroupPhoto();
+      });
+    }
+  }
+
+  Future<void> _loadCurrentMemberPhoto(String uid) async {
+    try {
+      final photoSource = await _firestoreService.getUserPhoto(uid);
+      if (!mounted || photoSource == null) return;
+      final member = _members[uid];
+      if (member == null) return;
+      setState(() {
+        _members[uid] = _GroupMember(
+          uid: member.uid,
+          email: member.email,
+          displayName: member.displayName,
+          photoSource: photoSource,
+        );
+      });
+    } catch (error) {
+      debugPrint('No se pudo cargar la foto del creador del grupo: $error');
+    }
+  }
+
+  Future<void> _selectGroupPhoto() async {
+    if (_isPickingGroupPhoto || _isLoading) return;
+    setState(() => _isPickingGroupPhoto = true);
+    try {
+      final picker = ImagePicker();
+      var image = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 320,
+        maxHeight: 320,
+        imageQuality: 70,
+      );
+      if (image == null && _supportsLostPhotoRecovery) {
+        final lostData = await picker.retrieveLostData();
+        if (lostData.exception != null) throw lostData.exception!;
+        image = lostData.files?.firstOrNull;
+      }
+      if (image != null) await _applyGroupPhoto(image);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo seleccionar la foto: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _isPickingGroupPhoto = false);
+    }
+  }
+
+  bool get _supportsLostPhotoRecovery =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+  Future<void> _restoreLostGroupPhoto() async {
+    if (!mounted) return;
+    try {
+      final lostData = await ImagePicker().retrieveLostData();
+      if (lostData.isEmpty) return;
+      if (lostData.exception != null) throw lostData.exception!;
+      final image = lostData.files?.firstOrNull;
+      if (image == null) {
+        throw StateError('No se pudo recuperar la imagen seleccionada.');
+      }
+      await _applyGroupPhoto(image);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudo recuperar la foto del grupo: $error'),
+        ),
       );
     }
+  }
+
+  Future<void> _applyGroupPhoto(XFile image) async {
+    final bytes = await image.readAsBytes();
+    if (bytes.length > 120 * 1024) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'La foto optimizada supera los 120 KB. Elige otra imagen.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _groupPhotoBytes = bytes;
+      _groupPhotoContentType = image.mimeType?.startsWith('image/') == true
+          ? image.mimeType!
+          : 'image/jpeg';
+    });
   }
 
   Future<void> _addMemberByEmail() async {
@@ -95,6 +209,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
           uid: uid,
           email: userEmail,
           displayName: displayName,
+          photoSource: user['photoSource'] as String?,
         );
         _memberEmailController.clear();
       });
@@ -128,6 +243,8 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
         memberNames: _members.map(
           (uid, member) => MapEntry(uid, member.displayName),
         ),
+        photoBytes: _groupPhotoBytes,
+        photoContentType: _groupPhotoContentType,
       );
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
@@ -201,18 +318,62 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Center(
-                          child: Container(
-                            width: 68,
-                            height: 68,
-                            decoration: BoxDecoration(
-                              color: scheme.primaryContainer,
-                              borderRadius: BorderRadius.circular(21),
+                          child: InkWell(
+                            onTap: _isLoading || _isPickingGroupPhoto
+                                ? null
+                                : _selectGroupPhoto,
+                            customBorder: const CircleBorder(),
+                            child: Stack(
+                              children: [
+                                CircleAvatar(
+                                  radius: 42,
+                                  backgroundColor: scheme.primaryContainer,
+                                  child: ClipOval(
+                                    child: SizedBox.expand(
+                                      child: _groupPhotoBytes == null
+                                          ? Icon(
+                                              Icons.groups_rounded,
+                                              size: 36,
+                                              color: scheme.onPrimaryContainer,
+                                            )
+                                          : ProfilePhotoImage(
+                                              source:
+                                                  'data:$_groupPhotoContentType;base64,${base64Encode(_groupPhotoBytes!)}',
+                                              fallback: Icon(
+                                                Icons.groups_rounded,
+                                                size: 36,
+                                                color:
+                                                    scheme.onPrimaryContainer,
+                                              ),
+                                            ),
+                                    ),
+                                  ),
+                                ),
+                                Positioned(
+                                  right: 0,
+                                  bottom: 0,
+                                  child: CircleAvatar(
+                                    radius: 14,
+                                    backgroundColor: scheme.primary,
+                                    child: Icon(
+                                      _isPickingGroupPhoto
+                                          ? Icons.hourglass_top_rounded
+                                          : Icons.camera_alt_rounded,
+                                      size: 16,
+                                      color: scheme.onPrimary,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                            child: Icon(
-                              Icons.groups_rounded,
-                              size: 36,
-                              color: scheme.onPrimaryContainer,
-                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Foto del grupo · opcional, solo al crearlo',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
                           ),
                         ),
                         const SizedBox(height: 20),
@@ -370,17 +531,12 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                                   FirebaseAuth.instance.currentUser?.uid;
                               final member = entry.value;
                               return InputChip(
-                                avatar: CircleAvatar(
+                                avatar: PersonAvatar(
+                                  name: member.displayName,
+                                  photoSource: member.photoSource,
+                                  radius: 16,
                                   backgroundColor: scheme.primaryContainer,
                                   foregroundColor: scheme.onPrimaryContainer,
-                                  child: Text(
-                                    member.displayName.isNotEmpty
-                                        ? member.displayName[0].toUpperCase()
-                                        : '?',
-                                    style: theme.textTheme.labelSmall?.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
                                 ),
                                 label: Text(
                                   member.email.isEmpty

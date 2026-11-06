@@ -4,6 +4,7 @@ import '../../models/expense_model.dart';
 import '../../models/group_model.dart';
 import '../../models/balance_model.dart';
 import '../../services/firestore_service.dart';
+import '../widgets/person_avatar.dart';
 
 /// Pantalla de balance del grupo (Requerimiento funcional:
 /// "Calcular automáticamente cuánto debe cada persona del grupo")
@@ -17,8 +18,20 @@ class BalanceScreen extends StatefulWidget {
 
 class _BalanceScreenState extends State<BalanceScreen> {
   final _firestoreService = FirestoreService();
-  final _currencyFormat =
-      NumberFormat.currency(locale: 'es_CL', symbol: '\$', decimalDigits: 0);
+  final _currencyFormat = NumberFormat.currency(
+    locale: 'es_CL',
+    symbol: '\$',
+    decimalDigits: 0,
+  );
+  late final Future<Map<String, String>> _memberPhotoUrls;
+
+  @override
+  void initState() {
+    super.initState();
+    _memberPhotoUrls = _firestoreService.getUserPhotoUrls(
+      widget.group.memberIds,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,16 +66,23 @@ class _BalanceScreenState extends State<BalanceScreen> {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              const Text('Balance por integrante',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const Text(
+                'Balance por integrante',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 8),
-              ...balances.map((b) => _BalanceTile(
-                    balance: b,
-                    currencyFormat: _currencyFormat,
-                  )),
+              ...balances.map(
+                (b) => _BalanceTile(
+                  balance: b,
+                  currencyFormat: _currencyFormat,
+                  memberPhotoUrls: _memberPhotoUrls,
+                ),
+              ),
               const SizedBox(height: 24),
-              const Text('Liquidación sugerida',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const Text(
+                'Liquidación sugerida',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 4),
               Text(
                 'Con estas transacciones todos quedan a mano, con el mínimo de pagos posible.',
@@ -75,16 +95,43 @@ class _BalanceScreenState extends State<BalanceScreen> {
                   child: Text('¡Todos están a mano! 🎉'),
                 )
               else
-                ...settlements.map((s) => Card(
+                ...settlements.map(
+                  (settlement) => FutureBuilder<Map<String, String>>(
+                    future: _memberPhotoUrls,
+                    builder: (context, snapshot) => Card(
                       child: ListTile(
-                        leading: const Icon(Icons.arrow_forward),
-                        title: Text('${s.fromName} → ${s.toName}'),
+                        minLeadingWidth: 62,
+                        horizontalTitleGap: 8,
+                        leading: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            PersonAvatar(
+                              name: settlement.fromName,
+                              photoSource: snapshot.data?[settlement.fromUid],
+                              radius: 16,
+                            ),
+                            const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 6),
+                              child: Icon(Icons.arrow_forward, size: 18),
+                            ),
+                            PersonAvatar(
+                              name: settlement.toName,
+                              photoSource: snapshot.data?[settlement.toUid],
+                              radius: 16,
+                            ),
+                          ],
+                        ),
+                        title: Text(
+                          '${settlement.fromName} → ${settlement.toName}',
+                        ),
                         trailing: Text(
-                          _currencyFormat.format(s.amount),
+                          _currencyFormat.format(settlement.amount),
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                       ),
-                    )),
+                    ),
+                  ),
+                ),
             ],
           );
         },
@@ -96,8 +143,13 @@ class _BalanceScreenState extends State<BalanceScreen> {
 class _BalanceTile extends StatelessWidget {
   final MemberBalance balance;
   final NumberFormat currencyFormat;
+  final Future<Map<String, String>> memberPhotoUrls;
 
-  const _BalanceTile({required this.balance, required this.currencyFormat});
+  const _BalanceTile({
+    required this.balance,
+    required this.currencyFormat,
+    required this.memberPhotoUrls,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -106,29 +158,32 @@ class _BalanceTile extends StatelessWidget {
     final color = isPositive
         ? Colors.green
         : isNegative
-            ? Colors.red
-            : Colors.grey;
+        ? Colors.red
+        : Colors.grey;
     final label = isPositive
         ? 'Le deben ${currencyFormat.format(balance.balance)}'
         : isNegative
-            ? 'Debe ${currencyFormat.format(-balance.balance)}'
-            : 'Está a mano';
+        ? 'Debe ${currencyFormat.format(-balance.balance)}'
+        : 'Está a mano';
 
-    return Card(
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: color.withValues(alpha: 0.15),
-          child: Text(
-            balance.name.isNotEmpty ? balance.name[0].toUpperCase() : '?',
+    return FutureBuilder<Map<String, String>>(
+      future: memberPhotoUrls,
+      builder: (context, snapshot) => Card(
+        child: ListTile(
+          leading: PersonAvatar(
+            name: balance.name,
+            photoSource: snapshot.data?[balance.uid],
+            backgroundColor: color.withValues(alpha: 0.15),
+            foregroundColor: color,
+          ),
+          title: Text(balance.name),
+          subtitle: Text(
+            'Pagó ${currencyFormat.format(balance.totalPaid)} · Le correspondía ${currencyFormat.format(balance.totalOwed)}',
+          ),
+          trailing: Text(
+            label,
             style: TextStyle(color: color, fontWeight: FontWeight.bold),
           ),
-        ),
-        title: Text(balance.name),
-        subtitle: Text(
-            'Pagó ${currencyFormat.format(balance.totalPaid)} · Le correspondía ${currencyFormat.format(balance.totalOwed)}'),
-        trailing: Text(
-          label,
-          style: TextStyle(color: color, fontWeight: FontWeight.bold),
         ),
       ),
     );

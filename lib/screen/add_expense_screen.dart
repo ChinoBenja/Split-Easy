@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../models/category_model.dart';
 import '../../models/group_model.dart';
 import '../../services/firestore_service.dart';
+import '../widgets/person_avatar.dart';
 
 enum _SplitMode { equal, percentage, custom }
 
@@ -36,10 +37,14 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   _SplitMode _splitMode = _SplitMode.equal;
   bool _isLoading = false;
   String? _errorMessage;
+  late final Future<Map<String, String>> _memberPhotoUrls;
 
   @override
   void initState() {
     super.initState();
+    _memberPhotoUrls = _firestoreService.getUserPhotoUrls(
+      widget.group.memberIds,
+    );
     _selectedParticipants = widget.group.memberIds.toSet();
     final currentUid = FirebaseAuth.instance.currentUser?.uid;
     _selectedPayers =
@@ -304,24 +309,15 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     );
   }
 
-  Widget _avatar(String name) {
-    final colors = Theme.of(context).colorScheme;
-    final initials = name
-        .trim()
-        .split(RegExp(r'\s+'))
-        .where((part) => part.isNotEmpty)
-        .take(2)
-        .map((part) => part.characters.first.toUpperCase())
-        .join();
-    return CircleAvatar(
-      radius: 18,
-      backgroundColor: colors.primaryContainer,
-      child: Text(
-        initials.isEmpty ? '?' : initials,
-        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-          color: colors.onPrimaryContainer,
-          fontWeight: FontWeight.w700,
-        ),
+  Widget _avatar(String name, String uid) {
+    return FutureBuilder<Map<String, String>>(
+      future: _memberPhotoUrls,
+      builder: (context, snapshot) => PersonAvatar(
+        name: name,
+        photoSource: snapshot.data?[uid],
+        radius: 18,
+        backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+        foregroundColor: Theme.of(context).colorScheme.onPrimaryContainer,
       ),
     );
   }
@@ -538,7 +534,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                                   });
                                 },
                               ),
-                              _avatar(name),
+                              _avatar(name, uid),
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
@@ -621,7 +617,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                               }
                             });
                           },
-                          secondary: _avatar(name),
+                          secondary: _avatar(name, uid),
                           title: Text(name),
                           contentPadding: const EdgeInsets.symmetric(
                             horizontal: 8,
@@ -695,7 +691,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                             padding: const EdgeInsets.symmetric(vertical: 5),
                             child: Row(
                               children: [
-                                _avatar(name),
+                                _avatar(name, uid),
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Text(
