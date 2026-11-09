@@ -15,6 +15,8 @@ import 'reports_screen.dart';
 import 'group_members_screen.dart';
 import '../widgets/profile_photo_image.dart';
 
+enum _GroupAction { history, chat, balance, analytics, reports, delete }
+
 class GroupDetailScreen extends StatefulWidget {
   final GroupModel group;
 
@@ -112,45 +114,103 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
           ),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.history_rounded),
-            tooltip: 'Historial de cambios',
-            onPressed: () =>
-                _navigateTo(context, HistoryScreen(group: widget.group)),
-          ),
-          IconButton(
-            icon: const Icon(Icons.chat_bubble_outline_rounded),
-            tooltip: 'Chat del grupo',
-            onPressed: () =>
-                _navigateTo(context, ChatScreen(group: widget.group)),
-          ),
-          IconButton(
-            icon: const Icon(Icons.bar_chart_rounded),
-            tooltip: 'Balance del grupo',
-            onPressed: () =>
-                _navigateTo(context, BalanceScreen(group: widget.group)),
-          ),
-          IconButton(
-            icon: const Icon(Icons.insights_rounded),
-            tooltip: 'Analítica financiera',
-            onPressed: () => _navigateTo(
-              context,
-              AnalyticsDashboardScreen(group: widget.group),
+          PopupMenuButton<_GroupAction>(
+            tooltip: 'Opciones del grupo',
+            icon: const Icon(Icons.settings_outlined),
+            position: PopupMenuPosition.under,
+            offset: const Offset(0, 8),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
             ),
+            onSelected: (action) {
+              switch (action) {
+                case _GroupAction.history:
+                  _navigateTo(context, HistoryScreen(group: widget.group));
+                case _GroupAction.chat:
+                  _navigateTo(context, ChatScreen(group: widget.group));
+                case _GroupAction.balance:
+                  _navigateTo(context, BalanceScreen(group: widget.group));
+                case _GroupAction.analytics:
+                  _navigateTo(
+                    context,
+                    AnalyticsDashboardScreen(group: widget.group),
+                  );
+                case _GroupAction.reports:
+                  _navigateTo(context, ReportsScreen(group: widget.group));
+                case _GroupAction.delete:
+                  _confirmDeleteGroup();
+              }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: _GroupAction.history,
+                child: Row(
+                  children: [
+                    const Icon(Icons.history_rounded),
+                    const SizedBox(width: 12),
+                    const Text('Historial de cambios'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: _GroupAction.chat,
+                child: Row(
+                  children: [
+                    const Icon(Icons.chat_bubble_outline_rounded),
+                    const SizedBox(width: 12),
+                    const Text('Chat de grupo'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: _GroupAction.balance,
+                child: Row(
+                  children: [
+                    const Icon(Icons.bar_chart_rounded),
+                    const SizedBox(width: 12),
+                    const Text('Balance de grupo'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: _GroupAction.analytics,
+                child: Row(
+                  children: [
+                    const Icon(Icons.insights_rounded),
+                    const SizedBox(width: 12),
+                    const Text('Analítica financiera'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: _GroupAction.reports,
+                child: Row(
+                  children: [
+                    const Icon(Icons.picture_as_pdf_outlined),
+                    const SizedBox(width: 12),
+                    const Text('Reportes y exportación PDF'),
+                  ],
+                ),
+              ),
+              if (canDeleteGroup) ...[
+                const PopupMenuDivider(),
+                PopupMenuItem(
+                  value: _GroupAction.delete,
+                  enabled: !_isDeletingGroup,
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete_outline_rounded, color: colors.error),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Eliminar grupo',
+                        style: TextStyle(color: colors.error),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
           ),
-          IconButton(
-            icon: const Icon(Icons.picture_as_pdf_outlined),
-            tooltip: 'Reportes y exportación PDF',
-            onPressed: () =>
-                _navigateTo(context, ReportsScreen(group: widget.group)),
-          ),
-          if (canDeleteGroup)
-            IconButton(
-              icon: const Icon(Icons.delete_outline_rounded),
-              tooltip: 'Eliminar grupo',
-              onPressed: _isDeletingGroup ? null : _confirmDeleteGroup,
-            ),
-          const SizedBox(width: 4),
         ],
       ),
       body: StreamBuilder<List<ExpenseModel>>(
