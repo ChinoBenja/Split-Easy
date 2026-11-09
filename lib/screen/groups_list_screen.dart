@@ -25,9 +25,8 @@ class _GroupsListScreenState extends State<GroupsListScreen> {
   final _searchController = TextEditingController();
   Stream<List<GroupModel>>? _groupsStream;
   String? _streamUid;
-  String? _photoUid;
-  Future<String?>? _userPhotoFuture;
   String _searchQuery = '';
+  int _selectedDestination = 0;
 
   @override
   void dispose() {
@@ -35,25 +34,30 @@ class _GroupsListScreenState extends State<GroupsListScreen> {
     super.dispose();
   }
 
-  Future<String?> _loadUserPhoto(String uid) {
-    if (_photoUid != uid || _userPhotoFuture == null) {
-      _photoUid = uid;
-      _userPhotoFuture = _firestoreService.getUserPhoto(uid);
-    }
-    return _userPhotoFuture!;
-  }
-
   Future<void> _openProfile() async {
     await Navigator.of(
       context,
     ).push(MaterialPageRoute<void>(builder: (_) => const ProfileScreen()));
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null || !mounted) return;
-    setState(() {
-      _photoUid = null;
-      _userPhotoFuture = null;
-      _loadUserPhoto(uid);
-    });
+  }
+
+  Future<void> _onDestinationSelected(int index) async {
+    if (index == 0) return;
+
+    setState(() => _selectedDestination = 0);
+    switch (index) {
+      case 1:
+        await _openCreateGroup();
+        break;
+      case 2:
+        await _openAssistant();
+        break;
+      case 3:
+        await _openProfile();
+        break;
+    }
+    if (mounted) {
+      setState(() => _selectedDestination = 0);
+    }
   }
 
   @override
@@ -106,82 +110,7 @@ class _GroupsListScreenState extends State<GroupsListScreen> {
             ),
           ],
         ),
-        actions: [
-          PopupMenuButton<String>(
-            tooltip: 'Perfil y configuración',
-            icon: FutureBuilder<String?>(
-              future: _loadUserPhoto(uid),
-              builder: (context, snapshot) {
-                final photoSource = snapshot.data;
-                return CircleAvatar(
-                  radius: 17,
-                  backgroundColor: colors.secondaryContainer,
-                  child: photoSource == null || photoSource.isEmpty
-                      ? Icon(
-                          Icons.person_outline_rounded,
-                          size: 20,
-                          color: colors.onSecondaryContainer,
-                        )
-                      : ClipOval(
-                          child: SizedBox.expand(
-                            child: ProfilePhotoImage(
-                              source: photoSource,
-                              fallback: Icon(
-                                Icons.person_outline_rounded,
-                                size: 20,
-                                color: colors.onSecondaryContainer,
-                              ),
-                            ),
-                          ),
-                        ),
-                );
-              },
-            ),
-            onSelected: (value) {
-              if (value == 'profile') {
-                _openProfile();
-              } else if (value == 'sign_out') {
-                FirebaseAuth.instance.signOut();
-              }
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem<String>(
-                enabled: false,
-                child: SizedBox(
-                  width: 210,
-                  child: Text(
-                    user?.email ?? 'Cuenta SplitEasy',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                ),
-              ),
-              const PopupMenuDivider(),
-              const PopupMenuItem<String>(
-                value: 'profile',
-                child: Row(
-                  children: [
-                    Icon(Icons.person_outline_rounded, size: 20),
-                    SizedBox(width: 12),
-                    Text('Mi perfil'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem<String>(
-                value: 'sign_out',
-                child: Row(
-                  children: [
-                    Icon(Icons.logout_rounded, size: 20),
-                    SizedBox(width: 12),
-                    Text('Cerrar sesión'),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(width: 8),
-        ],
+        actions: const [],
       ),
       body: StreamBuilder<List<GroupModel>>(
         stream: _groupsStream,
@@ -237,41 +166,46 @@ class _GroupsListScreenState extends State<GroupsListScreen> {
           );
         },
       ),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          FloatingActionButton(
-            heroTag: 'assistant-chat',
-            tooltip: 'Asistente IA',
-            backgroundColor: colors.tertiaryContainer,
-            foregroundColor: colors.onTertiaryContainer,
-            elevation: 4,
-            onPressed: _openAssistant,
-            child: const Icon(Icons.auto_awesome_rounded),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _selectedDestination,
+        onDestinationSelected: (index) {
+          _onDestinationSelected(index);
+        },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home_rounded),
+            label: 'Inicio',
           ),
-          const SizedBox(height: 12),
-          FloatingActionButton.extended(
-            heroTag: 'create-group',
-            icon: const Icon(Icons.add_rounded),
-            label: const Text('Nuevo grupo'),
-            onPressed: _openCreateGroup,
+          NavigationDestination(
+            icon: Icon(Icons.add_rounded),
+            label: 'Nuevo grupo',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.auto_awesome_outlined),
+            selectedIcon: Icon(Icons.auto_awesome_rounded),
+            label: 'Asistente',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline_rounded),
+            selectedIcon: Icon(Icons.person_rounded),
+            label: 'Perfil',
           ),
         ],
       ),
     );
   }
 
-  void _openAssistant() {
-    Navigator.of(context).push(
+  Future<void> _openAssistant() {
+    return Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const AssistantChatScreen()),
     );
   }
 
-  void _openCreateGroup() {
-    Navigator.of(
+  Future<void> _openCreateGroup() {
+    return Navigator.of(
       context,
-    ).push(MaterialPageRoute(builder: (_) => const CreateGroupScreen()));
+    ).push(MaterialPageRoute<void>(builder: (_) => const CreateGroupScreen()));
   }
 }
 
