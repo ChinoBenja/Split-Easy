@@ -30,7 +30,16 @@ class SplitEasyApp extends StatelessWidget {
       title: 'SplitEasy',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        primarySwatch: Colors.teal,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF3668C5),
+        ).copyWith(primary: const Color(0xFF3668C5)),
+        useMaterial3: true,
+      ),
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF3668C5),
+          brightness: Brightness.dark,
+        ),
         useMaterial3: true,
       ),
       home: const AuthGate(),
