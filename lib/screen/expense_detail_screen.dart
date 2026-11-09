@@ -70,11 +70,6 @@ class ExpenseDetailScreen extends StatelessWidget {
             surfaceTintColor: Colors.transparent,
             actions: [
               IconButton(
-                icon: const Icon(Icons.chat_bubble_outline_rounded),
-                tooltip: 'Chat del grupo',
-                onPressed: () => _navigate(context, ChatScreen(group: group)),
-              ),
-              IconButton(
                 icon: const Icon(Icons.edit_outlined),
                 tooltip: 'Proponer cambio',
                 onPressed: () => _navigate(
@@ -82,13 +77,6 @@ class ExpenseDetailScreen extends StatelessWidget {
                   EditExpenseScreen(group: group, expense: current),
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.delete_outline_rounded),
-                tooltip: 'Eliminar gasto',
-                onPressed: () =>
-                    _confirmDelete(context, firestoreService, current),
-              ),
-              const SizedBox(width: 4),
             ],
           ),
           body: Center(
@@ -187,6 +175,21 @@ class ExpenseDetailScreen extends StatelessWidget {
                     ),
                     icon: const Icon(Icons.chat_bubble_outline_rounded),
                     label: const Text('Ver conversación del grupo'),
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: () =>
+                        _confirmDelete(context, firestoreService, current),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: colors.primary,
+                      foregroundColor: colors.onPrimary,
+                      minimumSize: const Size.fromHeight(52),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                    ),
+                    icon: const Icon(Icons.delete_outline),
+                    label: const Text('Eliminar gasto'),
                   ),
                 ],
               ),
