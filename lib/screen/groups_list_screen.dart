@@ -350,7 +350,7 @@ class _GroupsDashboardState extends State<_GroupsDashboard> {
           padding: const EdgeInsets.fromLTRB(24, 12, 24, 112),
           children: [
             Text(
-              'Hola, ${widget.greetingName}',
+              'Hola, ${widget.greetingName}!',
               style: theme.textTheme.headlineMedium?.copyWith(
                 fontWeight: FontWeight.w700,
                 letterSpacing: -0.7,
