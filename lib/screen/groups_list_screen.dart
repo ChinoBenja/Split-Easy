@@ -133,16 +133,16 @@ class _GroupsListScreenState extends State<GroupsListScreen> {
     );
   }
 
-  void _openAssistant() {
-    Navigator.of(context).push(
+  Future<void> _openAssistant() {
+    return Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const AssistantChatScreen()),
     );
   }
 
-  void _openCreateGroup() {
-    Navigator.of(
+  Future<void> _openCreateGroup() {
+    return Navigator.of(
       context,
-    ).push(MaterialPageRoute(builder: (_) => const CreateGroupScreen()));
+    ).push(MaterialPageRoute<void>(builder: (_) => const CreateGroupScreen()));
   }
 
   void _openHome() {

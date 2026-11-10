@@ -124,6 +124,12 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
         actions: [
           PopupMenuButton<_GroupDetailAction>(
             tooltip: 'Más opciones del grupo',
+            icon: const Icon(Icons.settings_outlined),
+            position: PopupMenuPosition.under,
+            offset: const Offset(0, 8),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             onSelected: _handleGroupAction,
             itemBuilder: (context) => [
               _groupMenuItem(
