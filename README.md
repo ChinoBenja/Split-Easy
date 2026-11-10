@@ -34,15 +34,17 @@ a un plan de pago.
    npx wrangler deploy
    ```
 
-2. Copia la URL `https://spliteasy-assistant.<tu-subdominio>.workers.dev` que
-   Wrangler muestra al desplegar.
-3. Desde la raíz del proyecto, pasa esa URL al compilar o ejecutar Flutter:
+2. La app ya usa por defecto la URL desplegada
+   `https://spliteasy-assistant.benjahuang200437.workers.dev`.
+3. Si despliegas el Worker bajo otra URL, puedes sobrescribirla al ejecutar
+   Flutter:
 
    ```sh
    flutter run -d chrome --dart-define=ASSISTANT_WORKER_URL=https://spliteasy-assistant.<tu-subdominio>.workers.dev
    ```
 
-   Para Android, compila el APK con el mismo `--dart-define`.
+   Para Android, compila el APK con el mismo `--dart-define`. Si conservas la
+   URL configurada por defecto, no necesitas pasar esta opción.
 4. Inicia sesión en SplitEasy y abre **Asistente IA**.
 
 El Worker valida el token de Firebase Authentication antes de aceptar mensajes,

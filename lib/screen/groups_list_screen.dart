@@ -11,6 +11,7 @@ import 'add_expense_screen.dart';
 import 'create_group_screen.dart';
 import 'group_detail_screen.dart';
 import 'profile_screen.dart';
+import 'settings_screen.dart';
 import '../widgets/profile_photo_image.dart';
 import '../widgets/main_navigation_bar.dart';
 
@@ -103,11 +104,10 @@ class _GroupsListScreenState extends State<GroupsListScreen> {
             groups: _currentGroups,
             uid: uid,
             greetingName: greetingName,
-            userEmail: user?.email ?? '',
-            onSignOut: () => FirebaseAuth.instance.signOut(),
             onHomeTap: _openHome,
             onAssistantTap: _openAssistant,
             onProfileTap: _openProfile,
+            onSettingsTap: _openSettings,
             profilePhotoFuture: _loadUserPhoto(uid),
             onCreateGroup: _openCreateGroup,
             onAddExpenseTap: _addExpense,
@@ -137,6 +137,12 @@ class _GroupsListScreenState extends State<GroupsListScreen> {
     return Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const AssistantChatScreen()),
     );
+  }
+
+  Future<void> _openSettings() {
+    return Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const SettingsScreen()));
   }
 
   Future<void> _openCreateGroup() {
@@ -705,11 +711,10 @@ class _GroupsDashboard extends StatefulWidget {
     required this.groups,
     required this.uid,
     required this.greetingName,
-    required this.userEmail,
-    required this.onSignOut,
     required this.onHomeTap,
     required this.onAssistantTap,
     required this.onProfileTap,
+    required this.onSettingsTap,
     required this.profilePhotoFuture,
     required this.onCreateGroup,
     required this.onAddExpenseTap,
@@ -719,11 +724,10 @@ class _GroupsDashboard extends StatefulWidget {
   final List<GroupModel> groups;
   final String uid;
   final String greetingName;
-  final String userEmail;
-  final VoidCallback onSignOut;
   final VoidCallback onHomeTap;
   final VoidCallback onAssistantTap;
   final VoidCallback onProfileTap;
+  final VoidCallback onSettingsTap;
   final Future<String?> profilePhotoFuture;
   final VoidCallback onCreateGroup;
   final VoidCallback onAddExpenseTap;
@@ -939,69 +943,13 @@ class _GroupsDashboardState extends State<_GroupsDashboard> {
                                           ),
                                     ),
                                   ),
-                                  PopupMenuButton<String>(
+                                  IconButton(
                                     tooltip: 'Configuración',
+                                    onPressed: widget.onSettingsTap,
                                     icon: const Icon(
-                                      Icons.settings_outlined,
+                                      Icons.settings_rounded,
                                       color: Colors.white,
                                     ),
-                                    onSelected: (value) {
-                                      if (value == 'settings') {
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          const SnackBar(
-                                            content: Text(
-                                              'Las opciones estarán disponibles pronto.',
-                                            ),
-                                          ),
-                                        );
-                                      } else if (value == 'sign_out') {
-                                        widget.onSignOut();
-                                      }
-                                    },
-                                    itemBuilder: (context) => [
-                                      PopupMenuItem<String>(
-                                        enabled: false,
-                                        child: SizedBox(
-                                          width: 210,
-                                          child: Text(
-                                            widget.userEmail.isEmpty
-                                                ? 'Cuenta SplitEasy'
-                                                : widget.userEmail,
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                      ),
-                                      const PopupMenuDivider(),
-                                      const PopupMenuItem<String>(
-                                        value: 'settings',
-                                        child: Row(
-                                          children: [
-                                            Icon(
-                                              Icons.settings_outlined,
-                                              size: 20,
-                                            ),
-                                            SizedBox(width: 12),
-                                            Text('Configuración'),
-                                          ],
-                                        ),
-                                      ),
-                                      const PopupMenuItem<String>(
-                                        value: 'sign_out',
-                                        child: Row(
-                                          children: [
-                                            Icon(
-                                              Icons.logout_rounded,
-                                              size: 20,
-                                            ),
-                                            SizedBox(width: 12),
-                                            Text('Cerrar sesión'),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
                                   ),
                                 ],
                               ),

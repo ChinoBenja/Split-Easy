@@ -27,16 +27,16 @@ class MainNavigationBar extends StatelessWidget {
       color: Colors.transparent,
       child: SafeArea(
         top: false,
-        child: DecoratedBox(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF12345B), Color(0xFF075A78)],
+        child: SizedBox(
+          height: 72,
+          child: DecoratedBox(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF12345B), Color(0xFF075A78)],
+              ),
             ),
-          ),
-          child: SizedBox(
-            height: 72,
             child: Row(
               children: [
                 Expanded(

@@ -5,7 +5,10 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 class AssistantService {
-  static const _workerUrl = String.fromEnvironment('ASSISTANT_WORKER_URL');
+  static const _workerUrl = String.fromEnvironment(
+    'ASSISTANT_WORKER_URL',
+    defaultValue: 'https://spliteasy-assistant.benjahuang200437.workers.dev',
+  );
 
   Future<String> sendMessage(List<Map<String, String>> messages) async {
     if (_workerUrl.isEmpty) {

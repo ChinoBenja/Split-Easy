@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../models/category_model.dart';
 import '../../models/expense_model.dart';
 import '../../models/group_model.dart';
+import '../../models/balance_model.dart';
 import '../../services/firestore_service.dart';
 import 'add_expense_screen.dart';
 import 'assistant_chat_screen.dart';
@@ -16,10 +17,9 @@ import 'analytics_dashboard_screen.dart';
 import 'profile_screen.dart';
 import 'reports_screen.dart';
 import 'group_members_screen.dart';
+import 'group_options_screen.dart';
 import '../widgets/profile_photo_image.dart';
 import '../widgets/main_navigation_bar.dart';
-
-enum _GroupDetailAction { history, chat, balance, analytics, reports, delete }
 
 class GroupDetailScreen extends StatefulWidget {
   final GroupModel group;
@@ -122,49 +122,19 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
           ),
         ),
         actions: [
-          PopupMenuButton<_GroupDetailAction>(
-            tooltip: 'Más opciones del grupo',
-            icon: const Icon(Icons.settings_outlined),
-            position: PopupMenuPosition.under,
-            offset: const Offset(0, 8),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            onSelected: _handleGroupAction,
-            itemBuilder: (context) => [
-              _groupMenuItem(
-                _GroupDetailAction.history,
-                Icons.history_rounded,
-                'Historial de cambios',
-              ),
-              _groupMenuItem(
-                _GroupDetailAction.chat,
-                Icons.chat_bubble_outline_rounded,
-                'Chat del grupo',
-              ),
-              _groupMenuItem(
-                _GroupDetailAction.balance,
-                Icons.bar_chart_rounded,
-                'Balance del grupo',
-              ),
-              _groupMenuItem(
-                _GroupDetailAction.analytics,
-                Icons.insights_rounded,
-                'Analítica financiera',
-              ),
-              _groupMenuItem(
-                _GroupDetailAction.reports,
-                Icons.picture_as_pdf_outlined,
-                'Reportes y exportación PDF',
-              ),
-              if (canDeleteGroup)
-                _groupMenuItem(
-                  _GroupDetailAction.delete,
-                  Icons.delete_outline_rounded,
-                  'Eliminar grupo',
-                  enabled: !_isDeletingGroup,
-                ),
-            ],
+          IconButton(
+            tooltip: 'Opciones del grupo',
+            icon: const Icon(Icons.settings_rounded),
+            onPressed: _isDeletingGroup
+                ? null
+                : () => _navigateTo(
+                    context,
+                    GroupOptionsScreen(
+                      group: widget.group,
+                      canDeleteGroup: canDeleteGroup,
+                      onAction: _handleGroupAction,
+                    ),
+                  ),
           ),
         ],
       ),
@@ -207,6 +177,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
             group: widget.group,
             expenses: expenses,
           );
+          final settlements = _firestoreService.simplifyDebts(memberBalances);
           final userBalance = userId == null
               ? 0.0
               : memberBalances
@@ -241,6 +212,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                     userContribution: userContribution,
                     userBalance: userBalance,
                     currencyFormat: _currencyFormat,
+                    onDebtTap: () => _showDebtDetails(settlements, userId),
                   ),
                   const SizedBox(height: 28),
                   Row(
@@ -290,13 +262,29 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton.small(
-        heroTag: 'invite-member',
-        tooltip: 'Invitar integrante',
-        backgroundColor: colors.secondaryContainer,
-        foregroundColor: colors.onSecondaryContainer,
-        onPressed: _showInviteMemberDialog,
-        child: const Icon(Icons.person_add_alt_1_rounded),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          FloatingActionButton.small(
+            heroTag: 'group-chat',
+            tooltip: 'Chat del grupo',
+            backgroundColor: const Color(0xFF55D4F0),
+            foregroundColor: const Color(0xFF12345B),
+            onPressed: () =>
+                _navigateTo(context, ChatScreen(group: widget.group)),
+            child: const Icon(Icons.chat_bubble_rounded),
+          ),
+          const SizedBox(height: 12),
+          FloatingActionButton.small(
+            heroTag: 'invite-member',
+            tooltip: 'Invitar integrante',
+            backgroundColor: colors.secondaryContainer,
+            foregroundColor: colors.onSecondaryContainer,
+            onPressed: _showInviteMemberDialog,
+            child: const Icon(Icons.person_add_alt_1_rounded),
+          ),
+        ],
       ),
       bottomNavigationBar: MainNavigationBar(
         onHomeTap: () =>
@@ -323,42 +311,116 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     });
   }
 
+  Future<void> _showDebtDetails(
+    List<SettlementTransaction> settlements,
+    String? userId,
+  ) {
+    final debts = settlements
+        .where((settlement) => settlement.fromUid == userId)
+        .toList();
+
+    return showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      builder: (context) {
+        final theme = Theme.of(context);
+        final colors = theme.colorScheme;
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Tus deudas',
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'A quién debes y cuánto en ${widget.group.name}.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                if (debts.isEmpty)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: colors.primaryContainer.withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: const Text(
+                      'No tienes deudas pendientes en este grupo.',
+                    ),
+                  )
+                else
+                  ...debts.map(
+                    (debt) => Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      decoration: BoxDecoration(
+                        color: colors.surfaceContainerHighest.withValues(
+                          alpha: 0.7,
+                        ),
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: const Color(
+                            0xFF49C7E8,
+                          ).withValues(alpha: 0.18),
+                          child: const Icon(
+                            Icons.person_rounded,
+                            color: Color(0xFF087F8C),
+                          ),
+                        ),
+                        title: Text('Debes a ${debt.toName}'),
+                        subtitle: const Text('Liquidación sugerida'),
+                        trailing: Text(
+                          _currencyFormat.format(debt.amount),
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            color: colors.primary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   void _navigateTo(BuildContext context, Widget screen) {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
   }
 
-  PopupMenuItem<_GroupDetailAction> _groupMenuItem(
-    _GroupDetailAction action,
-    IconData icon,
-    String label, {
-    bool enabled = true,
-  }) {
-    return PopupMenuItem<_GroupDetailAction>(
-      value: action,
-      enabled: enabled,
-      child: Row(
-        children: [
-          Icon(icon, size: 20),
-          const SizedBox(width: 12),
-          Text(label),
-        ],
-      ),
-    );
-  }
-
-  void _handleGroupAction(_GroupDetailAction action) {
+  void _handleGroupAction(GroupOptionsAction action) {
     switch (action) {
-      case _GroupDetailAction.history:
+      case GroupOptionsAction.members:
+        _navigateTo(context, GroupMembersScreen(group: widget.group));
+      case GroupOptionsAction.inviteMember:
+        _showInviteMemberDialog();
+      case GroupOptionsAction.history:
         _navigateTo(context, HistoryScreen(group: widget.group));
-      case _GroupDetailAction.chat:
+      case GroupOptionsAction.chat:
         _navigateTo(context, ChatScreen(group: widget.group));
-      case _GroupDetailAction.balance:
+      case GroupOptionsAction.balance:
         _navigateTo(context, BalanceScreen(group: widget.group));
-      case _GroupDetailAction.analytics:
+      case GroupOptionsAction.analytics:
         _navigateTo(context, AnalyticsDashboardScreen(group: widget.group));
-      case _GroupDetailAction.reports:
+      case GroupOptionsAction.reports:
         _navigateTo(context, ReportsScreen(group: widget.group));
-      case _GroupDetailAction.delete:
+      case GroupOptionsAction.delete:
         _confirmDeleteGroup();
     }
   }
@@ -583,12 +645,14 @@ class _FinancialSummaryCard extends StatelessWidget {
     required this.userContribution,
     required this.userBalance,
     required this.currencyFormat,
+    required this.onDebtTap,
   });
 
   final double totalSpent;
   final double userContribution;
   final double userBalance;
   final NumberFormat currencyFormat;
+  final VoidCallback onDebtTap;
 
   @override
   Widget build(BuildContext context) {
@@ -611,16 +675,7 @@ class _FinancialSummaryCard extends StatelessWidget {
         : 'Al día';
 
     return Container(
-      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            colors.primary,
-            Color.lerp(colors.primary, colors.secondary, 0.34)!,
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
         borderRadius: BorderRadius.circular(26),
         boxShadow: [
           BoxShadow(
@@ -630,76 +685,128 @@ class _FinancialSummaryCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'GASTO TOTAL DEL GRUPO',
-            style: theme.textTheme.labelMedium?.copyWith(
-              color: colors.onPrimary.withValues(alpha: 0.76),
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(26),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      colors.primary,
+                      Color.lerp(colors.primary, colors.secondary, 0.34)!,
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+              ),
             ),
-          ),
-          const SizedBox(height: 7),
-          Text(
-            currencyFormat.format(totalSpent),
-            style: theme.textTheme.headlineLarge?.copyWith(
-              color: colors.onPrimary,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.6,
+            Positioned(
+              right: -54,
+              top: -72,
+              child: Container(
+                width: 210,
+                height: 210,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.08),
+                    width: 28,
+                  ),
+                ),
+              ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 18),
-            child: Divider(
-              height: 1,
-              color: colors.onPrimary.withValues(alpha: 0.2),
+            Positioned(
+              right: 46,
+              bottom: -96,
+              child: Container(
+                width: 180,
+                height: 180,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withValues(alpha: 0.045),
+                ),
+              ),
             ),
-          ),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final contributionMetric = _FinancialMetric(
-                title: 'TÚ HAS APORTADO',
-                value: currencyFormat.format(userContribution),
-                color: colors.onPrimary,
-                mutedColor: colors.onPrimary.withValues(alpha: 0.74),
-                icon: Icons.account_balance_wallet_outlined,
-              );
-              final balanceMetric = _FinancialMetric(
-                title: balanceTitle,
-                value: balanceValue,
-                color: balanceColor,
-                mutedColor: colors.onPrimary.withValues(alpha: 0.74),
-                icon: isDebt
-                    ? Icons.south_west_rounded
-                    : isCredit
-                    ? Icons.north_east_rounded
-                    : Icons.check_circle_outline_rounded,
-              );
-
-              if (constraints.maxWidth < 480) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    contributionMetric,
-                    const SizedBox(height: 18),
-                    balanceMetric,
-                  ],
-                );
-              }
-
-              return Row(
+            Padding(
+              padding: const EdgeInsets.all(22),
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(child: contributionMetric),
-                  const SizedBox(width: 20),
-                  Expanded(child: balanceMetric),
+                  Text(
+                    'GASTO TOTAL DEL GRUPO',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: colors.onPrimary.withValues(alpha: 0.76),
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                  const SizedBox(height: 7),
+                  Text(
+                    currencyFormat.format(totalSpent),
+                    style: theme.textTheme.headlineLarge?.copyWith(
+                      color: colors.onPrimary,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.6,
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    child: Divider(
+                      height: 1,
+                      color: colors.onPrimary.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final contributionMetric = _FinancialMetric(
+                        title: 'TÚ HAS APORTADO',
+                        value: currencyFormat.format(userContribution),
+                        color: colors.onPrimary,
+                        mutedColor: colors.onPrimary.withValues(alpha: 0.74),
+                        icon: Icons.account_balance_wallet_outlined,
+                      );
+                      final balanceMetric = _FinancialMetric(
+                        title: balanceTitle,
+                        value: balanceValue,
+                        color: balanceColor,
+                        mutedColor: colors.onPrimary.withValues(alpha: 0.74),
+                        icon: isDebt
+                            ? Icons.south_west_rounded
+                            : isCredit
+                            ? Icons.north_east_rounded
+                            : Icons.check_circle_outline_rounded,
+                        onTap: isDebt ? onDebtTap : null,
+                      );
+
+                      if (constraints.maxWidth < 480) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            contributionMetric,
+                            const SizedBox(height: 18),
+                            balanceMetric,
+                          ],
+                        );
+                      }
+
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: contributionMetric),
+                          const SizedBox(width: 20),
+                          Expanded(child: balanceMetric),
+                        ],
+                      );
+                    },
+                  ),
                 ],
-              );
-            },
-          ),
-        ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -712,6 +819,7 @@ class _FinancialMetric extends StatelessWidget {
     required this.color,
     required this.mutedColor,
     required this.icon,
+    this.onTap,
   });
 
   final String title;
@@ -719,41 +827,60 @@ class _FinancialMetric extends StatelessWidget {
   final Color color;
   final Color mutedColor;
   final IconData icon;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: mutedColor,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.8,
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: mutedColor,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.8,
+            ),
           ),
-        ),
-        const SizedBox(height: 6),
-        Row(
-          children: [
-            Icon(icon, color: color, size: 18),
-            const SizedBox(width: 7),
-            Flexible(
-              child: Text(
-                value,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.titleLarge?.copyWith(
-                  color: color,
-                  fontWeight: FontWeight.w700,
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Icon(icon, color: color, size: 18),
+              const SizedBox(width: 7),
+              Flexible(
+                child: Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
-            ),
-          ],
-        ),
-      ],
+              if (onTap != null)
+                TextButton(
+                  onPressed: onTap,
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFFB4F0FF),
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text(
+                    'Ver deudas',
+                    maxLines: 1,
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
