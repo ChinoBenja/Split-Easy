@@ -1,5 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart' as intl_local;
 import 'firebase_options.dart';
@@ -11,18 +13,32 @@ import 'services/notification_service.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await intl_local.initializeDateFormatting('es', null);
+  Object? firebaseInitializationError;
   try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-  } catch (_) {
-    // Fallback para entornos de prueba o cuando la inicialización no está disponible.
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      await Firebase.initializeApp();
+    } else {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    }
+  } catch (error, stackTrace) {
+    debugPrint('Firebase initialization failed: $error');
+    debugPrintStack(stackTrace: stackTrace);
+    firebaseInitializationError = error;
   }
-  runApp(const SplitEasyApp());
+  if (firebaseInitializationError == null) {
+    NotificationService.registerBackgroundHandler();
+  }
+  runApp(
+    SplitEasyApp(firebaseInitializationError: firebaseInitializationError),
+  );
 }
 
 class SplitEasyApp extends StatelessWidget {
-  const SplitEasyApp({super.key});
+  final Object? firebaseInitializationError;
+
+  const SplitEasyApp({super.key, this.firebaseInitializationError});
 
   @override
   Widget build(BuildContext context) {
@@ -30,10 +46,47 @@ class SplitEasyApp extends StatelessWidget {
       title: 'SplitEasy',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        primarySwatch: Colors.teal,
+        colorScheme:
+            ColorScheme.fromSeed(
+              seedColor: const Color(0xFF176B87),
+              brightness: Brightness.light,
+            ).copyWith(
+              primary: const Color(0xFF2457C5),
+              secondary: const Color(0xFF087F8C),
+              surface: const Color(0xFFF6F9FC),
+              surfaceContainerHighest: const Color(0xFFEAF1F7),
+            ),
         useMaterial3: true,
       ),
-      home: const AuthGate(),
+      home: firebaseInitializationError == null
+          ? const AuthGate()
+          : const _FirebaseInitializationErrorScreen(),
+    );
+  }
+}
+
+class _FirebaseInitializationErrorScreen extends StatelessWidget {
+  const _FirebaseInitializationErrorScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.cloud_off_rounded, size: 48),
+              SizedBox(height: 16),
+              Text(
+                'No se pudo iniciar Firebase. Comprueba tu conexión e inténtalo de nuevo.',
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

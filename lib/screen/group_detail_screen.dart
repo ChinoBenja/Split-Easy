@@ -6,14 +6,20 @@ import '../../models/expense_model.dart';
 import '../../models/group_model.dart';
 import '../../services/firestore_service.dart';
 import 'add_expense_screen.dart';
+import 'assistant_chat_screen.dart';
 import 'balance_screen.dart';
 import 'chat_screen.dart';
+import 'create_group_screen.dart';
 import 'expense_detail_screen.dart';
 import 'history_screen.dart';
 import 'analytics_dashboard_screen.dart';
+import 'profile_screen.dart';
 import 'reports_screen.dart';
 import 'group_members_screen.dart';
 import '../widgets/profile_photo_image.dart';
+import '../widgets/main_navigation_bar.dart';
+
+enum _GroupDetailAction { history, chat, balance, analytics, reports, delete }
 
 class GroupDetailScreen extends StatefulWidget {
   final GroupModel group;
@@ -34,11 +40,15 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
   final _dateFormat = DateFormat('dd MMM yyyy', 'es');
 
   bool _isDeletingGroup = false;
+  Future<String?>? _userPhotoFuture;
 
   @override
   void initState() {
     super.initState();
     final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      _userPhotoFuture = _firestoreService.getUserPhoto(user.uid);
+    }
     // ignore: avoid_print
     print(
       'DEBUG: currentUid=${user?.uid}, groupCreatedBy=${widget.group.createdBy}',
@@ -112,45 +122,44 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
           ),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.history_rounded),
-            tooltip: 'Historial de cambios',
-            onPressed: () =>
-                _navigateTo(context, HistoryScreen(group: widget.group)),
+          PopupMenuButton<_GroupDetailAction>(
+            tooltip: 'Más opciones del grupo',
+            onSelected: _handleGroupAction,
+            itemBuilder: (context) => [
+              _groupMenuItem(
+                _GroupDetailAction.history,
+                Icons.history_rounded,
+                'Historial de cambios',
+              ),
+              _groupMenuItem(
+                _GroupDetailAction.chat,
+                Icons.chat_bubble_outline_rounded,
+                'Chat del grupo',
+              ),
+              _groupMenuItem(
+                _GroupDetailAction.balance,
+                Icons.bar_chart_rounded,
+                'Balance del grupo',
+              ),
+              _groupMenuItem(
+                _GroupDetailAction.analytics,
+                Icons.insights_rounded,
+                'Analítica financiera',
+              ),
+              _groupMenuItem(
+                _GroupDetailAction.reports,
+                Icons.picture_as_pdf_outlined,
+                'Reportes y exportación PDF',
+              ),
+              if (canDeleteGroup)
+                _groupMenuItem(
+                  _GroupDetailAction.delete,
+                  Icons.delete_outline_rounded,
+                  'Eliminar grupo',
+                  enabled: !_isDeletingGroup,
+                ),
+            ],
           ),
-          IconButton(
-            icon: const Icon(Icons.chat_bubble_outline_rounded),
-            tooltip: 'Chat del grupo',
-            onPressed: () =>
-                _navigateTo(context, ChatScreen(group: widget.group)),
-          ),
-          IconButton(
-            icon: const Icon(Icons.bar_chart_rounded),
-            tooltip: 'Balance del grupo',
-            onPressed: () =>
-                _navigateTo(context, BalanceScreen(group: widget.group)),
-          ),
-          IconButton(
-            icon: const Icon(Icons.insights_rounded),
-            tooltip: 'Analítica financiera',
-            onPressed: () => _navigateTo(
-              context,
-              AnalyticsDashboardScreen(group: widget.group),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.picture_as_pdf_outlined),
-            tooltip: 'Reportes y exportación PDF',
-            onPressed: () =>
-                _navigateTo(context, ReportsScreen(group: widget.group)),
-          ),
-          if (canDeleteGroup)
-            IconButton(
-              icon: const Icon(Icons.delete_outline_rounded),
-              tooltip: 'Eliminar grupo',
-              onPressed: _isDeletingGroup ? null : _confirmDeleteGroup,
-            ),
-          const SizedBox(width: 4),
         ],
       ),
       body: StreamBuilder<List<ExpenseModel>>(
@@ -275,36 +284,77 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
           );
         },
       ),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
+      floatingActionButton: FloatingActionButton.small(
+        heroTag: 'invite-member',
+        tooltip: 'Invitar integrante',
+        backgroundColor: colors.secondaryContainer,
+        foregroundColor: colors.onSecondaryContainer,
+        onPressed: _showInviteMemberDialog,
+        child: const Icon(Icons.person_add_alt_1_rounded),
+      ),
+      bottomNavigationBar: MainNavigationBar(
+        onHomeTap: () =>
+            Navigator.of(context).popUntil((route) => route.isFirst),
+        onGroupsTap: () => Navigator.of(context).maybePop(),
+        onAssistantTap: () => _navigateTo(context, const AssistantChatScreen()),
+        onCreateGroupTap: () => _navigateTo(context, const CreateGroupScreen()),
+        onAddExpenseTap: () =>
+            _navigateTo(context, AddExpenseScreen(group: widget.group)),
+        onProfileTap: _openProfile,
+        profilePhotoFuture: _userPhotoFuture ?? Future<String?>.value(null),
+      ),
+    );
+  }
+
+  Future<void> _openProfile() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const ProfileScreen()));
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || !mounted) return;
+    setState(() {
+      _userPhotoFuture = _firestoreService.getUserPhoto(uid);
+    });
+  }
+
+  void _navigateTo(BuildContext context, Widget screen) {
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
+  }
+
+  PopupMenuItem<_GroupDetailAction> _groupMenuItem(
+    _GroupDetailAction action,
+    IconData icon,
+    String label, {
+    bool enabled = true,
+  }) {
+    return PopupMenuItem<_GroupDetailAction>(
+      value: action,
+      enabled: enabled,
+      child: Row(
         children: [
-          FloatingActionButton.small(
-            heroTag: 'invite-member',
-            tooltip: 'Invitar integrante',
-            backgroundColor: colors.secondaryContainer,
-            foregroundColor: colors.onSecondaryContainer,
-            onPressed: _showInviteMemberDialog,
-            child: const Icon(Icons.person_add_alt_1_rounded),
-          ),
-          const SizedBox(height: 12),
-          FloatingActionButton.extended(
-            heroTag: 'add-expense',
-            backgroundColor: colors.primary,
-            foregroundColor: colors.onPrimary,
-            elevation: 3,
-            icon: const Icon(Icons.add_rounded),
-            label: const Text('Agregar gasto'),
-            onPressed: () =>
-                _navigateTo(context, AddExpenseScreen(group: widget.group)),
-          ),
+          Icon(icon, size: 20),
+          const SizedBox(width: 12),
+          Text(label),
         ],
       ),
     );
   }
 
-  void _navigateTo(BuildContext context, Widget screen) {
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
+  void _handleGroupAction(_GroupDetailAction action) {
+    switch (action) {
+      case _GroupDetailAction.history:
+        _navigateTo(context, HistoryScreen(group: widget.group));
+      case _GroupDetailAction.chat:
+        _navigateTo(context, ChatScreen(group: widget.group));
+      case _GroupDetailAction.balance:
+        _navigateTo(context, BalanceScreen(group: widget.group));
+      case _GroupDetailAction.analytics:
+        _navigateTo(context, AnalyticsDashboardScreen(group: widget.group));
+      case _GroupDetailAction.reports:
+        _navigateTo(context, ReportsScreen(group: widget.group));
+      case _GroupDetailAction.delete:
+        _confirmDeleteGroup();
+    }
   }
 
   Future<void> _showInviteMemberDialog() async {
@@ -560,7 +610,7 @@ class _FinancialSummaryCard extends StatelessWidget {
         gradient: LinearGradient(
           colors: [
             colors.primary,
-            Color.lerp(colors.primary, colors.tertiary, 0.34)!,
+            Color.lerp(colors.primary, colors.secondary, 0.34)!,
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -723,12 +773,12 @@ class _ExpenseCard extends StatelessWidget {
 
     return Card(
       margin: EdgeInsets.zero,
-      elevation: 1,
-      shadowColor: colors.shadow.withValues(alpha: 0.07),
-      color: colors.surfaceContainerLow,
+      elevation: 0,
+      shadowColor: colors.primary.withValues(alpha: 0.06),
+      color: Colors.white,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: colors.outlineVariant.withValues(alpha: 0.55)),
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: colors.primary.withValues(alpha: 0.09)),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -739,11 +789,11 @@ class _ExpenseCard extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 24,
-                backgroundColor: colors.secondaryContainer,
+                backgroundColor: const Color(0xFFE7F3F8),
                 child: Icon(
                   iconForCategory(expense.category),
                   size: 21,
-                  color: colors.onSecondaryContainer,
+                  color: colors.secondary,
                 ),
               ),
               const SizedBox(width: 13),
@@ -796,6 +846,7 @@ class _ExpenseCard extends StatelessWidget {
                   Text(
                     currencyFormat.format(expense.amount),
                     style: theme.textTheme.titleMedium?.copyWith(
+                      color: colors.primary,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -808,7 +859,7 @@ class _ExpenseCard extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: isSettled
                           ? const Color(0xFF19734A).withValues(alpha: 0.1)
-                          : colors.tertiaryContainer,
+                          : colors.secondaryContainer,
                       borderRadius: BorderRadius.circular(24),
                     ),
                     child: Text(
@@ -818,7 +869,7 @@ class _ExpenseCard extends StatelessWidget {
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: isSettled
                             ? const Color(0xFF19734A)
-                            : colors.onTertiaryContainer,
+                            : colors.onSecondaryContainer,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
