@@ -272,287 +272,477 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
     final theme = Theme.of(context);
-    final colors = theme.colorScheme;
     final passwordBorder = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: BorderSide(color: colors.outlineVariant),
+      borderRadius: BorderRadius.circular(15),
+      borderSide: const BorderSide(color: Color(0xFFDCE8EF)),
+    );
+    final focusedPasswordBorder = passwordBorder.copyWith(
+      borderSide: const BorderSide(color: Color(0xFF2457C5), width: 1.5),
     );
 
     return Scaffold(
-      backgroundColor: colors.surface,
+      backgroundColor: const Color(0xFFEAF4FB),
       appBar: AppBar(
-        title: const Text('Mi perfil'),
-        backgroundColor: colors.surface,
+        title: Text(
+          'Mi perfil',
+          style: theme.textTheme.titleLarge?.copyWith(
+            color: const Color(0xFF173B75),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        backgroundColor: const Color(0xFFEAF4FB),
+        foregroundColor: const Color(0xFF173B75),
+        elevation: 0,
+        scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
       ),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 520),
+              constraints: const BoxConstraints(maxWidth: 600),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Card(
-                    color: colors.surfaceContainerLowest,
+                    margin: EdgeInsets.zero,
+                    elevation: 1,
+                    shadowColor: const Color(
+                      0xFF173B75,
+                    ).withValues(alpha: 0.08),
+                    color: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(22),
+                      side: const BorderSide(color: Color(0xFFDCE8EF)),
+                    ),
+                    clipBehavior: Clip.antiAlias,
                     child: Padding(
-                      padding: const EdgeInsets.all(20),
+                      padding: EdgeInsets.zero,
                       child: Column(
                         children: [
-                          InkWell(
-                            onTap: _isLoading ? null : _changeProfilePhoto,
-                            customBorder: const CircleBorder(),
-                            child: Stack(
-                              children: [
-                                CircleAvatar(
-                                  radius: 36,
-                                  backgroundColor: colors.primaryContainer,
-                                  child: ClipOval(
-                                    child: SizedBox.expand(
-                                      child:
-                                          _photoUrl?.trim().isNotEmpty == true
-                                          ? ProfilePhotoImage(
-                                              source: _photoUrl!,
-                                              fallback: Icon(
-                                                Icons.person_rounded,
-                                                size: 38,
-                                                color:
-                                                    colors.onPrimaryContainer,
-                                              ),
-                                              fit: BoxFit.cover,
-                                            )
-                                          : Icon(
-                                              Icons.person_rounded,
-                                              size: 38,
-                                              color: colors.onPrimaryContainer,
-                                            ),
-                                    ),
+                          Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              Container(
+                                height: 104,
+                                width: double.infinity,
+                                decoration: const BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      Color(0xFF3B82B8),
+                                      Color(0xFF69B8D0),
+                                    ],
                                   ),
                                 ),
-                                Positioned(
-                                  right: 0,
-                                  bottom: 0,
-                                  child: CircleAvatar(
-                                    radius: 13,
-                                    backgroundColor: colors.primary,
-                                    child: Icon(
-                                      _isLoading
-                                          ? Icons.hourglass_top_rounded
-                                          : Icons.camera_alt_rounded,
-                                      size: 15,
-                                      color: colors.onPrimary,
+                                child: Stack(
+                                  children: [
+                                    Positioned(
+                                      right: -24,
+                                      top: -62,
+                                      child: Container(
+                                        width: 150,
+                                        height: 150,
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withValues(
+                                            alpha: 0.1,
+                                          ),
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
                                     ),
+                                    const Positioned(
+                                      left: 18,
+                                      top: 17,
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            Icons.account_circle_rounded,
+                                            color: Colors.white,
+                                            size: 20,
+                                          ),
+                                          SizedBox(width: 8),
+                                          Text(
+                                            'CUENTA SPLITEASY',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w700,
+                                              letterSpacing: 1.1,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Positioned(
+                                left: 20,
+                                bottom: -34,
+                                child: InkWell(
+                                  onTap: _isLoading
+                                      ? null
+                                      : _changeProfilePhoto,
+                                  customBorder: const CircleBorder(),
+                                  child: Stack(
+                                    children: [
+                                      CircleAvatar(
+                                        radius: 42,
+                                        backgroundColor: Colors.white,
+                                        child: CircleAvatar(
+                                          radius: 37,
+                                          backgroundColor: const Color(
+                                            0xFFE7F3F8,
+                                          ),
+                                          child: ClipOval(
+                                            child: SizedBox.expand(
+                                              child:
+                                                  _photoUrl
+                                                          ?.trim()
+                                                          .isNotEmpty ==
+                                                      true
+                                                  ? ProfilePhotoImage(
+                                                      source: _photoUrl!,
+                                                      fallback: const Icon(
+                                                        Icons.person_rounded,
+                                                        size: 40,
+                                                        color: Color(
+                                                          0xFF087F8C,
+                                                        ),
+                                                      ),
+                                                      fit: BoxFit.cover,
+                                                    )
+                                                  : const Icon(
+                                                      Icons.person_rounded,
+                                                      size: 40,
+                                                      color: Color(0xFF087F8C),
+                                                    ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      Positioned(
+                                        right: 1,
+                                        bottom: 1,
+                                        child: CircleAvatar(
+                                          radius: 14,
+                                          backgroundColor: const Color(
+                                            0xFF2457C5,
+                                          ),
+                                          child: Icon(
+                                            _isLoading
+                                                ? Icons.hourglass_top_rounded
+                                                : Icons.camera_alt_rounded,
+                                            size: 15,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 42, 20, 20),
+                            child: Column(
+                              children: [
+                                TextButton.icon(
+                                  onPressed: _isLoading
+                                      ? null
+                                      : _changeProfilePhoto,
+                                  icon: const Icon(
+                                    Icons.photo_camera_outlined,
+                                    size: 17,
+                                  ),
+                                  label: const Text('Cambiar foto'),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: const Color(0xFF2457C5),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  user?.displayName?.trim().isNotEmpty == true
+                                      ? user!.displayName!.trim()
+                                      : 'Sin nombre',
+                                  textAlign: TextAlign.center,
+                                  style: theme.textTheme.titleLarge?.copyWith(
+                                    color: const Color(0xFF173B75),
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                const SizedBox(height: 5),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(
+                                      Icons.email_outlined,
+                                      size: 16,
+                                      color: Color(0xFF687C8D),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Flexible(
+                                      child: Text(
+                                        user?.email ?? 'Correo no disponible',
+                                        textAlign: TextAlign.center,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: theme.textTheme.bodyMedium
+                                            ?.copyWith(
+                                              color: const Color(0xFF687C8D),
+                                            ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          TextButton(
-                            onPressed: _isLoading ? null : _changeProfilePhoto,
-                            child: const Text('Cambiar foto'),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            user?.displayName?.trim().isNotEmpty == true
-                                ? user!.displayName!.trim()
-                                : 'Sin nombre',
-                            textAlign: TextAlign.center,
-                            style: theme.textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            user?.email ?? 'Correo no disponible',
-                            textAlign: TextAlign.center,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: colors.onSurfaceVariant,
                             ),
                           ),
                         ],
                       ),
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  Text(
-                    'Cambiar contraseña',
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
+                  const SizedBox(height: 22),
+                  Card(
+                    margin: EdgeInsets.zero,
+                    elevation: 1,
+                    shadowColor: const Color(
+                      0xFF173B75,
+                    ).withValues(alpha: 0.06),
+                    color: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(22),
+                      side: const BorderSide(color: Color(0xFFDCE8EF)),
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'La nueva contraseña debe tener al menos 6 caracteres.',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: colors.onSurfaceVariant,
+                    child: Padding(
+                      padding: const EdgeInsets.all(18),
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  width: 42,
+                                  height: 42,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFE7F3F8),
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: const Icon(
+                                    Icons.lock_reset_rounded,
+                                    color: Color(0xFF087F8C),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Cambiar contraseña',
+                                        style: theme.textTheme.titleLarge
+                                            ?.copyWith(
+                                              color: const Color(0xFF173B75),
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        'Mínimo 6 caracteres',
+                                        style: theme.textTheme.bodySmall
+                                            ?.copyWith(
+                                              color: const Color(0xFF687C8D),
+                                            ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 20),
+                            if (_requiresCurrentPassword) ...[
+                              TextFormField(
+                                controller: _currentPasswordController,
+                                obscureText: _obscureCurrentPassword,
+                                enabled: !_isLoading,
+                                decoration: InputDecoration(
+                                  labelText: 'Contraseña actual',
+                                  filled: true,
+                                  fillColor: const Color(0xFFF5FAFD),
+                                  prefixIcon: const Icon(
+                                    Icons.lock_outline_rounded,
+                                    color: Color(0xFF687C8D),
+                                  ),
+                                  border: passwordBorder,
+                                  enabledBorder: passwordBorder,
+                                  focusedBorder: focusedPasswordBorder,
+                                  suffixIcon: IconButton(
+                                    padding: const EdgeInsets.all(12),
+                                    constraints: const BoxConstraints(
+                                      minWidth: 48,
+                                      minHeight: 48,
+                                    ),
+                                    tooltip: _obscureCurrentPassword
+                                        ? 'Mostrar contraseña'
+                                        : 'Ocultar contraseña',
+                                    onPressed: () => setState(
+                                      () => _obscureCurrentPassword =
+                                          !_obscureCurrentPassword,
+                                    ),
+                                    icon: Icon(
+                                      _obscureCurrentPassword
+                                          ? Icons.visibility_outlined
+                                          : Icons.visibility_off_outlined,
+                                    ),
+                                  ),
+                                ),
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'Ingresa tu contraseña actual.';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 18),
+                            ],
+                            TextFormField(
+                              controller: _newPasswordController,
+                              obscureText: _obscureNewPassword,
+                              enabled: !_isLoading,
+                              decoration: InputDecoration(
+                                labelText: 'Nueva contraseña',
+                                filled: true,
+                                fillColor: const Color(0xFFF5FAFD),
+                                prefixIcon: const Icon(
+                                  Icons.lock_reset_rounded,
+                                  color: Color(0xFF687C8D),
+                                ),
+                                border: passwordBorder,
+                                enabledBorder: passwordBorder,
+                                focusedBorder: focusedPasswordBorder,
+                                suffixIcon: IconButton(
+                                  padding: const EdgeInsets.all(12),
+                                  constraints: const BoxConstraints(
+                                    minWidth: 48,
+                                    minHeight: 48,
+                                  ),
+                                  tooltip: _obscureNewPassword
+                                      ? 'Mostrar contraseña'
+                                      : 'Ocultar contraseña',
+                                  onPressed: () => setState(
+                                    () => _obscureNewPassword =
+                                        !_obscureNewPassword,
+                                  ),
+                                  icon: Icon(
+                                    _obscureNewPassword
+                                        ? Icons.visibility_outlined
+                                        : Icons.visibility_off_outlined,
+                                  ),
+                                ),
+                              ),
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Ingresa una nueva contraseña.';
+                                }
+                                if (value.length < 6) {
+                                  return 'Debe tener al menos 6 caracteres.';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 18),
+                            TextFormField(
+                              controller: _confirmPasswordController,
+                              obscureText: _obscureConfirmPassword,
+                              enabled: !_isLoading,
+                              decoration: InputDecoration(
+                                labelText: 'Confirmar nueva contraseña',
+                                filled: true,
+                                fillColor: const Color(0xFFF5FAFD),
+                                prefixIcon: const Icon(
+                                  Icons.lock_outline_rounded,
+                                  color: Color(0xFF687C8D),
+                                ),
+                                border: passwordBorder,
+                                enabledBorder: passwordBorder,
+                                focusedBorder: focusedPasswordBorder,
+                                suffixIcon: IconButton(
+                                  padding: const EdgeInsets.all(12),
+                                  constraints: const BoxConstraints(
+                                    minWidth: 48,
+                                    minHeight: 48,
+                                  ),
+                                  tooltip: _obscureConfirmPassword
+                                      ? 'Mostrar contraseña'
+                                      : 'Ocultar contraseña',
+                                  onPressed: () => setState(
+                                    () => _obscureConfirmPassword =
+                                        !_obscureConfirmPassword,
+                                  ),
+                                  icon: Icon(
+                                    _obscureConfirmPassword
+                                        ? Icons.visibility_outlined
+                                        : Icons.visibility_off_outlined,
+                                  ),
+                                ),
+                              ),
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Confirma la nueva contraseña.';
+                                }
+                                if (value != _newPasswordController.text) {
+                                  return 'Las contraseñas no coinciden.';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 20),
+                            FilledButton.icon(
+                              onPressed: _isLoading ? null : _changePassword,
+                              icon: _isLoading
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(Icons.key_rounded),
+                              label: const Text('Actualizar contraseña'),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFF2457C5),
+                                foregroundColor: Colors.white,
+                                minimumSize: const Size.fromHeight(48),
+                                shape: const StadiumBorder(),
+                                textStyle: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Form(
-                    key: _formKey,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (_requiresCurrentPassword) ...[
-                          TextFormField(
-                            controller: _currentPasswordController,
-                            obscureText: _obscureCurrentPassword,
-                            enabled: !_isLoading,
-                            decoration: InputDecoration(
-                              labelText: 'Contraseña actual',
-                              prefixIcon: const Icon(Icons.lock_outline),
-                              border: passwordBorder,
-                              enabledBorder: passwordBorder,
-                              focusedBorder: passwordBorder.copyWith(
-                                borderSide: BorderSide(
-                                  color: colors.primary,
-                                  width: 1.5,
-                                ),
-                              ),
-                              suffixIcon: IconButton(
-                                padding: const EdgeInsets.all(12),
-                                constraints: const BoxConstraints(
-                                  minWidth: 48,
-                                  minHeight: 48,
-                                ),
-                                tooltip: _obscureCurrentPassword
-                                    ? 'Mostrar contraseña'
-                                    : 'Ocultar contraseña',
-                                onPressed: () => setState(
-                                  () => _obscureCurrentPassword =
-                                      !_obscureCurrentPassword,
-                                ),
-                                icon: Icon(
-                                  _obscureCurrentPassword
-                                      ? Icons.visibility_outlined
-                                      : Icons.visibility_off_outlined,
-                                ),
-                              ),
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Ingresa tu contraseña actual.';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 18),
-                        ],
-                        TextFormField(
-                          controller: _newPasswordController,
-                          obscureText: _obscureNewPassword,
-                          enabled: !_isLoading,
-                          decoration: InputDecoration(
-                            labelText: 'Nueva contraseña',
-                            prefixIcon: const Icon(Icons.lock_reset_rounded),
-                            border: passwordBorder,
-                            enabledBorder: passwordBorder,
-                            focusedBorder: passwordBorder.copyWith(
-                              borderSide: BorderSide(
-                                color: colors.primary,
-                                width: 1.5,
-                              ),
-                            ),
-                            suffixIcon: IconButton(
-                              padding: const EdgeInsets.all(12),
-                              constraints: const BoxConstraints(
-                                minWidth: 48,
-                                minHeight: 48,
-                              ),
-                              tooltip: _obscureNewPassword
-                                  ? 'Mostrar contraseña'
-                                  : 'Ocultar contraseña',
-                              onPressed: () => setState(
-                                () =>
-                                    _obscureNewPassword = !_obscureNewPassword,
-                              ),
-                              icon: Icon(
-                                _obscureNewPassword
-                                    ? Icons.visibility_outlined
-                                    : Icons.visibility_off_outlined,
-                              ),
-                            ),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Ingresa una nueva contraseña.';
-                            }
-                            if (value.length < 6) {
-                              return 'Debe tener al menos 6 caracteres.';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 18),
-                        TextFormField(
-                          controller: _confirmPasswordController,
-                          obscureText: _obscureConfirmPassword,
-                          enabled: !_isLoading,
-                          decoration: InputDecoration(
-                            labelText: 'Confirmar nueva contraseña',
-                            prefixIcon: const Icon(Icons.lock_outline),
-                            border: passwordBorder,
-                            enabledBorder: passwordBorder,
-                            focusedBorder: passwordBorder.copyWith(
-                              borderSide: BorderSide(
-                                color: colors.primary,
-                                width: 1.5,
-                              ),
-                            ),
-                            suffixIcon: IconButton(
-                              padding: const EdgeInsets.all(12),
-                              constraints: const BoxConstraints(
-                                minWidth: 48,
-                                minHeight: 48,
-                              ),
-                              tooltip: _obscureConfirmPassword
-                                  ? 'Mostrar contraseña'
-                                  : 'Ocultar contraseña',
-                              onPressed: () => setState(
-                                () => _obscureConfirmPassword =
-                                    !_obscureConfirmPassword,
-                              ),
-                              icon: Icon(
-                                _obscureConfirmPassword
-                                    ? Icons.visibility_outlined
-                                    : Icons.visibility_off_outlined,
-                              ),
-                            ),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Confirma la nueva contraseña.';
-                            }
-                            if (value != _newPasswordController.text) {
-                              return 'Las contraseñas no coinciden.';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 20),
-                        FilledButton.icon(
-                          onPressed: _isLoading ? null : _changePassword,
-                          icon: _isLoading
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.key_rounded),
-                          label: const Text('Actualizar contraseña'),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
                   OutlinedButton.icon(
                     onPressed: _isLoading ? null : _signOut,
                     icon: const Icon(Icons.logout_rounded),
                     label: const Text('Cerrar sesión'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF2457C5),
+                      side: const BorderSide(color: Color(0xFF9AABB8)),
+                      minimumSize: const Size.fromHeight(48),
+                      shape: const StadiumBorder(),
+                      textStyle: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
                   ),
                 ],
               ),

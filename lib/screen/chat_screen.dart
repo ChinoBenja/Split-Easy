@@ -197,10 +197,59 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     final currentUid = FirebaseAuth.instance.currentUser?.uid;
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: Text('Chat · ${widget.group.name}')),
+      backgroundColor: const Color(0xFFEAF4FB),
+      appBar: AppBar(
+        titleSpacing: 0,
+        title: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: const Color(0xFFE7F3F8),
+                borderRadius: BorderRadius.circular(13),
+              ),
+              child: const Icon(
+                Icons.forum_rounded,
+                color: Color(0xFF087F8C),
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    widget.group.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: const Color(0xFF173B75),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Text(
+                    'Chat del grupo',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: const Color(0xFF687C8D),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: const Color(0xFFEAF4FB),
+        foregroundColor: const Color(0xFF173B75),
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
+      ),
       body: Column(
         children: [
           Expanded(
@@ -214,21 +263,75 @@ class _ChatScreenState extends State<ChatScreen> {
                       child: Text(
                         'No se pudieron cargar los mensajes: ${snapshot.error}',
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: scheme.error),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: const Color(0xFFD94E61),
+                        ),
                       ),
                     ),
                   );
                 }
                 if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const Center(
+                    child: CircularProgressIndicator(color: Color(0xFF2457C5)),
+                  );
                 }
                 final messages = snapshot.data!;
                 if (messages.isEmpty) {
                   return Center(
-                    child: Text(
-                      'Aún no hay mensajes.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: scheme.onSurfaceVariant),
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Container(
+                        constraints: const BoxConstraints(maxWidth: 340),
+                        padding: const EdgeInsets.all(22),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(22),
+                          border: Border.all(color: const Color(0xFFDCE8EF)),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(
+                                0xFF173B75,
+                              ).withValues(alpha: 0.05),
+                              blurRadius: 16,
+                              offset: const Offset(0, 5),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 56,
+                              height: 56,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE7F3F8),
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              child: const Icon(
+                                Icons.forum_outlined,
+                                color: Color(0xFF087F8C),
+                                size: 28,
+                              ),
+                            ),
+                            const SizedBox(height: 13),
+                            Text(
+                              'Aún no hay mensajes',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                color: const Color(0xFF173B75),
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 5),
+                            Text(
+                              'Inicia la conversación con tu grupo.',
+                              textAlign: TextAlign.center,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: const Color(0xFF687C8D),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   );
                 }
@@ -240,7 +343,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         photoSnapshot.data ?? const <String, String>{};
                     return ListView.builder(
                       reverse: true,
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.fromLTRB(14, 14, 14, 18),
                       itemCount: messages.length,
                       itemBuilder: (context, index) {
                         final message = messages[index];
@@ -284,74 +387,109 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
           SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (_isSending)
-                  Column(
-                    children: [
-                      const LinearProgressIndicator(),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(
-                          _isPickingImage
-                              ? 'Seleccionando imagen...'
-                              : _isUploadingImage
-                              ? 'Enviando imagen...'
-                              : 'Enviando mensaje...',
-                          style: Theme.of(context).textTheme.labelSmall,
-                        ),
-                      ),
-                    ],
+            top: false,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: const Border(top: BorderSide(color: Color(0xFFDCE8EF))),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF173B75).withValues(alpha: 0.05),
+                    blurRadius: 12,
+                    offset: const Offset(0, -4),
                   ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _messageController,
-                          textCapitalization: TextCapitalization.sentences,
-                          minLines: 1,
-                          maxLines: 5,
-                          decoration: InputDecoration(
-                            hintText: 'Escribe un mensaje...',
-                            filled: true,
-                            fillColor: scheme.surfaceContainerHighest,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(28),
-                              borderSide: BorderSide.none,
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(28),
-                              borderSide: BorderSide.none,
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(28),
-                              borderSide: BorderSide(color: scheme.primary),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 18,
-                              vertical: 12,
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_isSending)
+                    Column(
+                      children: [
+                        const LinearProgressIndicator(
+                          minHeight: 2,
+                          color: Color(0xFF2457C5),
+                          backgroundColor: Color(0xFFE7F3F8),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 5),
+                          child: Text(
+                            _isPickingImage
+                                ? 'Seleccionando imagen...'
+                                : _isUploadingImage
+                                ? 'Enviando imagen...'
+                                : 'Enviando mensaje...',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: const Color(0xFF687C8D),
                             ),
                           ),
-                          onSubmitted: (_) => _sendMessage(),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        onPressed: _isSending ? null : _pickAndSendImage,
-                        tooltip: 'Adjuntar imagen',
-                        icon: const Icon(Icons.image_outlined),
-                      ),
-                      IconButton.filled(
-                        onPressed: _isSending ? null : _sendMessage,
-                        icon: const Icon(Icons.send),
-                      ),
-                    ],
+                      ],
+                    ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 9, 12, 10),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _messageController,
+                            textCapitalization: TextCapitalization.sentences,
+                            minLines: 1,
+                            maxLines: 5,
+                            decoration: InputDecoration(
+                              hintText: 'Escribe un mensaje...',
+                              hintStyle: const TextStyle(
+                                color: Color(0xFF687C8D),
+                              ),
+                              filled: true,
+                              fillColor: const Color(0xFFEAF4FB),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(24),
+                                borderSide: BorderSide.none,
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(24),
+                                borderSide: BorderSide.none,
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(24),
+                                borderSide: const BorderSide(
+                                  color: Color(0xFF54A6C7),
+                                  width: 1.3,
+                                ),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 17,
+                                vertical: 12,
+                              ),
+                            ),
+                            onSubmitted: (_) => _sendMessage(),
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        IconButton(
+                          onPressed: _isSending ? null : _pickAndSendImage,
+                          tooltip: 'Adjuntar imagen',
+                          style: IconButton.styleFrom(
+                            foregroundColor: const Color(0xFF173B75),
+                          ),
+                          icon: const Icon(Icons.image_outlined),
+                        ),
+                        const SizedBox(width: 2),
+                        IconButton.filled(
+                          onPressed: _isSending ? null : _sendMessage,
+                          style: IconButton.styleFrom(
+                            backgroundColor: const Color(0xFF2457C5),
+                            foregroundColor: Colors.white,
+                          ),
+                          icon: const Icon(Icons.send_rounded),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
@@ -374,19 +512,38 @@ class _TextMessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final foregroundColor = isMine ? scheme.onPrimary : scheme.onSurface;
+    final foregroundColor = isMine ? Colors.white : const Color(0xFF173B75);
 
     final imageUrl = message.imageUrl?.trim();
     final bubble = Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       constraints: BoxConstraints(
-        maxWidth: MediaQuery.sizeOf(context).width * 0.72,
+        maxWidth: MediaQuery.sizeOf(context).width * 0.68,
       ),
       decoration: BoxDecoration(
-        color: isMine ? scheme.primary : scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(16),
+        gradient: isMine
+            ? const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF2457C5), Color(0xFF087F8C)],
+              )
+            : null,
+        color: isMine ? null : Colors.white,
+        borderRadius: BorderRadius.only(
+          topLeft: const Radius.circular(18),
+          topRight: const Radius.circular(18),
+          bottomLeft: Radius.circular(isMine ? 18 : 6),
+          bottomRight: Radius.circular(isMine ? 6 : 18),
+        ),
+        border: isMine ? null : Border.all(color: const Color(0xFFDCE8EF)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF173B75).withValues(alpha: 0.06),
+            blurRadius: 9,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -396,8 +553,8 @@ class _TextMessageBubble extends StatelessWidget {
             style: theme.textTheme.labelMedium?.copyWith(
               fontWeight: FontWeight.bold,
               color: isMine
-                  ? scheme.onPrimary.withValues(alpha: 0.8)
-                  : scheme.onSurfaceVariant,
+                  ? Colors.white.withValues(alpha: 0.82)
+                  : const Color(0xFF087F8C),
             ),
           ),
           if (imageUrl != null && imageUrl.isNotEmpty) ...[
@@ -419,7 +576,11 @@ class _TextMessageBubble extends StatelessWidget {
                     return const SizedBox(
                       width: 220,
                       height: 180,
-                      child: Center(child: CircularProgressIndicator()),
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          color: Color(0xFF2457C5),
+                        ),
+                      ),
                     );
                   },
                   errorBuilder: (context, error, stackTrace) => const SizedBox(
@@ -438,6 +599,7 @@ class _TextMessageBubble extends StatelessWidget {
               message.text!,
               style: theme.textTheme.bodyLarge?.copyWith(
                 color: foregroundColor,
+                height: 1.35,
               ),
             ),
           ],
@@ -449,8 +611,8 @@ class _TextMessageBubble extends StatelessWidget {
                 DateFormat('HH:mm').format(message.createdAt),
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: isMine
-                      ? scheme.onPrimary.withValues(alpha: 0.75)
-                      : scheme.onSurfaceVariant,
+                      ? Colors.white.withValues(alpha: 0.76)
+                      : const Color(0xFF8093A1),
                 ),
               ),
             ),
@@ -498,7 +660,9 @@ class _TextMessageBubble extends StatelessWidget {
                 if (progress == null) return child;
                 return const SizedBox(
                   height: 300,
-                  child: Center(child: CircularProgressIndicator()),
+                  child: Center(
+                    child: CircularProgressIndicator(color: Color(0xFF2457C5)),
+                  ),
                 );
               },
               errorBuilder: (context, error, stackTrace) => const SizedBox(
@@ -528,12 +692,12 @@ class _SenderAvatar extends StatelessWidget {
 
     return CircleAvatar(
       radius: 16,
-      backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
+      backgroundColor: const Color(0xFFD9EDF4),
       child: url == null || url.isEmpty
           ? Text(
               initials,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSecondaryContainer,
+              style: const TextStyle(
+                color: Color(0xFF087F8C),
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
               ),
@@ -545,10 +709,8 @@ class _SenderAvatar extends StatelessWidget {
                   fallback: Center(
                     child: Text(
                       initials,
-                      style: TextStyle(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.onSecondaryContainer,
+                      style: const TextStyle(
+                        color: Color(0xFF087F8C),
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
                       ),
@@ -568,19 +730,27 @@ class _SystemMessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: 7),
       child: Center(
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.sizeOf(context).width * 0.88,
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
           decoration: BoxDecoration(
-            color: Colors.grey.shade100,
-            borderRadius: BorderRadius.circular(12),
+            color: Colors.white.withValues(alpha: 0.88),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFFDCE8EF)),
           ),
           child: Text(
             message.text ?? '',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: const Color(0xFF687C8D),
+              height: 1.35,
+            ),
           ),
         ),
       ),
@@ -594,19 +764,27 @@ class _SettlementRequestBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Center(
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.sizeOf(context).width * 0.88,
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
           decoration: BoxDecoration(
-            color: Colors.blue.shade50,
-            borderRadius: BorderRadius.circular(10),
+            color: const Color(0xFFE7F3F8),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFD2E7EF)),
           ),
           child: Text(
             '💵 ${message.senderName} avisó que pagó su cuota de "${message.expenseDescription ?? 'un gasto'}"',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12, color: Colors.blue.shade800),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: const Color(0xFF176B87),
+              height: 1.35,
+            ),
           ),
         ),
       ),
@@ -706,12 +884,16 @@ class _GroupDeletionProposalCardState
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Card(
-            color: colors.errorContainer,
+            color: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+              side: BorderSide(color: colors.error.withValues(alpha: 0.3)),
+            ),
             child: Padding(
               padding: const EdgeInsets.all(14),
               child: Text(
                 'No se pudo cargar la votación: ${snapshot.error}',
-                style: TextStyle(color: colors.onErrorContainer),
+                style: TextStyle(color: colors.error),
               ),
             ),
           );
@@ -742,16 +924,17 @@ class _GroupDeletionProposalCardState
             widget.currentUid != null &&
             !proposal.hasResponded(widget.currentUid!);
         final statusColor = proposal.status == 'approved'
-            ? colors.primary
+            ? const Color(0xFF2E9D68)
             : proposal.status == 'rejected'
-            ? colors.error
-            : colors.tertiary;
+            ? const Color(0xFFD94E61)
+            : const Color(0xFFE28B22);
 
         return Card(
           margin: const EdgeInsets.symmetric(vertical: 8),
-          color: colors.errorContainer.withValues(alpha: 0.48),
+          color: Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
+            side: BorderSide(color: colors.error.withValues(alpha: 0.25)),
           ),
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -766,6 +949,7 @@ class _GroupDeletionProposalCardState
                       child: Text(
                         '${proposal.proposedByName} propuso eliminar el grupo',
                         style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: const Color(0xFF173B75),
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -812,6 +996,11 @@ class _GroupDeletionProposalCardState
                           onPressed: _isResponding
                               ? null
                               : () => _respond(proposal, 'rejected'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFFD94E61),
+                            side: const BorderSide(color: Color(0xFFD94E61)),
+                            shape: const StadiumBorder(),
+                          ),
                           child: const Text('Rechazar'),
                         ),
                       ),
@@ -821,6 +1010,11 @@ class _GroupDeletionProposalCardState
                           onPressed: _isResponding
                               ? null
                               : () => _respond(proposal, 'accepted'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF2457C5),
+                            foregroundColor: Colors.white,
+                            shape: const StadiumBorder(),
+                          ),
                           child: _isResponding
                               ? const SizedBox(
                                   width: 18,
@@ -902,17 +1096,17 @@ class _ProposalCard extends StatelessWidget {
         String statusText;
         switch (proposal.status) {
           case 'approved':
-            statusColor = Colors.green;
+            statusColor = const Color(0xFF2E9D68);
             statusText = isDelete ? '✅ Gasto eliminado' : '✅ Cambio aplicado';
             break;
           case 'rejected':
-            statusColor = Colors.red;
+            statusColor = const Color(0xFFD94E61);
             statusText = isDelete
                 ? '❌ Eliminación rechazada'
                 : '❌ Cambio rechazado';
             break;
           default:
-            statusColor = Colors.orange;
+            statusColor = const Color(0xFFE28B22);
             statusText = pending.isEmpty
                 ? 'Pendiente'
                 : 'Esperando: ${pending.map((id) => group.memberNames[id] ?? '').join(', ')}';
@@ -920,18 +1114,32 @@ class _ProposalCard extends StatelessWidget {
 
         return Card(
           margin: const EdgeInsets.symmetric(vertical: 8),
-          color: isDelete ? Colors.red.shade50 : Colors.blue.shade50,
+          color: Colors.white,
+          elevation: 1,
+          shadowColor: const Color(0xFF173B75).withValues(alpha: 0.06),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(
+              color:
+                  (isDelete ? const Color(0xFFD94E61) : const Color(0xFF54A6C7))
+                      .withValues(alpha: 0.28),
+            ),
+          ),
           child: Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(15),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
                     Icon(
-                      isDelete ? Icons.delete_outline : Icons.edit_note,
+                      isDelete
+                          ? Icons.delete_outline_rounded
+                          : Icons.edit_note_rounded,
                       size: 20,
-                      color: isDelete ? Colors.red : Colors.blueGrey,
+                      color: isDelete
+                          ? const Color(0xFFD94E61)
+                          : const Color(0xFF087F8C),
                     ),
                     const SizedBox(width: 6),
                     Expanded(
@@ -939,7 +1147,10 @@ class _ProposalCard extends StatelessWidget {
                         isDelete
                             ? '${proposal.proposedByName} propuso ELIMINAR un gasto'
                             : '${proposal.proposedByName} propuso un cambio',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: const Color(0xFF173B75),
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   ],
@@ -948,7 +1159,9 @@ class _ProposalCard extends StatelessWidget {
                 if (isDelete)
                   Text(
                     '"${proposal.oldValues['description'] ?? ''}" · ${currencyFormat.format((proposal.oldValues['amount'] as num?)?.toDouble() ?? 0)}',
-                    style: const TextStyle(fontSize: 13),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: const Color(0xFF526879),
+                    ),
                   )
                 else
                   ..._buildDiffLines(proposal, currencyFormat),
@@ -960,7 +1173,7 @@ class _ProposalCard extends StatelessWidget {
                   ),
                   decoration: BoxDecoration(
                     color: statusColor.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
                     statusText,
@@ -983,6 +1196,11 @@ class _ProposalCard extends StatelessWidget {
                             proposal,
                             'rejected',
                           ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFFD94E61),
+                            side: const BorderSide(color: Color(0xFFD94E61)),
+                            shape: const StadiumBorder(),
+                          ),
                           child: const Text('Rechazar'),
                         ),
                       ),
@@ -994,6 +1212,11 @@ class _ProposalCard extends StatelessWidget {
                             firestoreService,
                             proposal,
                             'accepted',
+                          ),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF2457C5),
+                            foregroundColor: Colors.white,
+                            shape: const StadiumBorder(),
                           ),
                           child: Text(
                             isDelete ? 'Aceptar eliminación' : 'Aceptar',
@@ -1041,7 +1264,7 @@ class _ProposalCard extends StatelessWidget {
         padding: EdgeInsets.only(top: 4),
         child: Text(
           'Revisa el detalle del gasto para ver los pagadores y participantes actualizados.',
-          style: TextStyle(fontSize: 11, color: Colors.black54),
+          style: TextStyle(fontSize: 11, color: Color(0xFF687C8D)),
         ),
       ),
     );
@@ -1054,7 +1277,7 @@ class _ProposalCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: RichText(
         text: TextSpan(
-          style: const TextStyle(fontSize: 13, color: Colors.black87),
+          style: const TextStyle(fontSize: 13, color: Color(0xFF526879)),
           children: [
             TextSpan(
               text: '$label: ',
@@ -1064,7 +1287,7 @@ class _ProposalCard extends StatelessWidget {
               text: '$oldValue',
               style: const TextStyle(
                 decoration: TextDecoration.lineThrough,
-                color: Colors.black45,
+                color: Color(0xFF8093A1),
               ),
             ),
             const TextSpan(text: '  →  '),
@@ -1072,7 +1295,7 @@ class _ProposalCard extends StatelessWidget {
               text: '$newValue',
               style: const TextStyle(
                 fontWeight: FontWeight.bold,
-                color: Colors.blue,
+                color: Color(0xFF2457C5),
               ),
             ),
           ],

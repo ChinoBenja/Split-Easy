@@ -85,47 +85,94 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Exportar reportes')),
+      backgroundColor: const Color(0xFFEAF4FB),
+      appBar: AppBar(
+        title: Text(
+          'Exportar reportes',
+          style: theme.textTheme.titleLarge?.copyWith(
+            color: const Color(0xFF173B75),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        backgroundColor: const Color(0xFFEAF4FB),
+        foregroundColor: const Color(0xFF173B75),
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
+      ),
       body: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 620),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
+          constraints: const BoxConstraints(maxWidth: 760),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  'Exporta el historial de gastos y el balance de "${widget.group.name}".',
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: colors.onSurfaceVariant,
-                    height: 1.45,
-                  ),
+                _ReportsHeader(groupName: widget.group.name),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE7F3F8),
+                        borderRadius: BorderRadius.circular(13),
+                      ),
+                      child: const Icon(
+                        Icons.file_download_outlined,
+                        color: Color(0xFF087F8C),
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 11),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Elige un formato',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              color: const Color(0xFF173B75),
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          Text(
+                            'Preparamos el archivo para compartirlo.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: const Color(0xFF687C8D),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 28),
+                const SizedBox(height: 13),
                 _ReportOptionCard(
-                  icon: Icons.picture_as_pdf_outlined,
-                  accentColor: colors.error,
+                  icon: Icons.picture_as_pdf_rounded,
+                  accentColor: const Color(0xFFD94E61),
                   title: 'Exportar como PDF',
                   subtitle:
-                      'Incluye detalle de gastos, balances y liquidación.',
+                      'Detalle de gastos, balances y liquidación sugerida.',
                   isLoading: _isGeneratingPdf,
                   onTap: _exportPdf,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 _ReportOptionCard(
-                  icon: Icons.table_chart_outlined,
-                  accentColor: colors.primary,
+                  icon: Icons.table_chart_rounded,
+                  accentColor: const Color(0xFF2457C5),
                   title: 'Exportar como Excel',
                   subtitle:
-                      'Dos hojas: gastos y balances, para análisis propio.',
+                      'Hojas de gastos y balances para analizar los datos.',
                   isLoading: _isGeneratingExcel,
                   onTap: _exportExcel,
                 ),
                 if (_errorMessage != null) ...[
-                  const SizedBox(height: 16),
-                  Text(_errorMessage!, style: TextStyle(color: colors.error)),
+                  const SizedBox(height: 14),
+                  _ReportErrorCard(message: _errorMessage!),
                 ],
               ],
             ),
@@ -162,36 +209,40 @@ class _ReportOptionCardState extends State<_ReportOptionCard> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
     return AnimatedPhysicalModel(
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOut,
       shape: BoxShape.rectangle,
-      borderRadius: BorderRadius.circular(22),
-      elevation: _isHovered ? 5 : 1,
-      color: colors.surfaceContainerLowest,
-      shadowColor: colors.shadow.withValues(alpha: 0.18),
+      borderRadius: BorderRadius.circular(20),
+      elevation: _isHovered ? 4 : 1,
+      color: Colors.white,
+      shadowColor: const Color(0xFF173B75).withValues(alpha: 0.1),
       child: Material(
-        color: Colors.transparent,
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: widget.accentColor.withValues(alpha: 0.18)),
+        ),
         child: InkWell(
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: BorderRadius.circular(20),
           onHover: (hovering) => setState(() => _isHovered = hovering),
           onTap: widget.isLoading ? null : widget.onTap,
           child: Padding(
-            padding: const EdgeInsets.all(18),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 17),
             child: Row(
               children: [
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 180),
-                  width: 54,
-                  height: 54,
+                  width: 52,
+                  height: 52,
                   decoration: BoxDecoration(
                     color: widget.accentColor.withValues(
-                      alpha: _isHovered ? 0.18 : 0.12,
+                      alpha: _isHovered ? 0.16 : 0.11,
                     ),
-                    borderRadius: BorderRadius.circular(17),
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                  child: Icon(widget.icon, size: 28, color: widget.accentColor),
+                  child: Icon(widget.icon, size: 26, color: widget.accentColor),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -200,14 +251,16 @@ class _ReportOptionCardState extends State<_ReportOptionCard> {
                     children: [
                       Text(
                         widget.title,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w700),
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: const Color(0xFF173B75),
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         widget.subtitle,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: colors.onSurfaceVariant,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: const Color(0xFF687C8D),
                           height: 1.35,
                         ),
                       ),
@@ -229,12 +282,179 @@ class _ReportOptionCardState extends State<_ReportOptionCard> {
                     Icons.arrow_forward_rounded,
                     color: _isHovered
                         ? widget.accentColor
-                        : colors.onSurfaceVariant,
+                        : const Color(0xFF687C8D),
                   ),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ReportsHeader extends StatelessWidget {
+  const _ReportsHeader({required this.groupName});
+
+  final String groupName;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF3B82B8), Color(0xFF69B8D0)],
+        ),
+        borderRadius: BorderRadius.circular(26),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF176B87).withValues(alpha: 0.18),
+            blurRadius: 22,
+            offset: const Offset(0, 9),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          Positioned(
+            right: -26,
+            top: -62,
+            child: Container(
+              width: 154,
+              height: 154,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(13),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.2),
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.description_outlined,
+                      color: Colors.white,
+                      size: 21,
+                    ),
+                  ),
+                  const SizedBox(width: 11),
+                  Text(
+                    'REPORTES DEL GRUPO',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: Colors.white.withValues(alpha: 0.92),
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.1,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 17),
+              Text(
+                groupName,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.4,
+                  height: 1.1,
+                ),
+              ),
+              const SizedBox(height: 7),
+              Text(
+                'Exporta el historial de gastos y el balance de tu grupo.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: Colors.white.withValues(alpha: 0.9),
+                  height: 1.35,
+                ),
+              ),
+              const SizedBox(height: 15),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 11,
+                  vertical: 7,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.17),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.folder_copy_outlined,
+                      size: 15,
+                      color: Colors.white,
+                    ),
+                    const SizedBox(width: 7),
+                    Text(
+                      'PDF y Excel disponibles',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReportErrorCard extends StatelessWidget {
+  const _ReportErrorCard({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    const errorColor = Color(0xFFD94E61);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: errorColor.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline_rounded, color: errorColor),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: errorColor,
+                height: 1.35,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

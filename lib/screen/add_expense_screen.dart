@@ -272,31 +272,39 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     required Widget child,
     Widget? trailing,
   }) {
-    final colors = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
     return Card(
       margin: EdgeInsets.zero,
-      elevation: 1,
-      shadowColor: colors.shadow.withValues(alpha: 0.06),
-      color: colors.surfaceContainerLow,
+      elevation: 2,
+      shadowColor: const Color(0xFF173B75).withValues(alpha: 0.06),
+      color: Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(22),
-        side: BorderSide(color: colors.outlineVariant.withValues(alpha: 0.55)),
+        side: const BorderSide(color: Color(0xFFDCE8EF)),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(icon, color: colors.primary, size: 21),
-                const SizedBox(width: 10),
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE7F3F8),
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  child: Icon(icon, color: const Color(0xFF176B87), size: 20),
+                ),
+                const SizedBox(width: 11),
                 Expanded(
                   child: Text(
                     title,
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w700,
+                      color: const Color(0xFF173B75),
                     ),
                   ),
                 ),
@@ -325,25 +333,32 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   }
 
   Widget _statusMessage({required bool isValid, required String text}) {
-    final colors = Theme.of(context).colorScheme;
-    final color = isValid ? const Color(0xFF19734A) : colors.error;
-    return Row(
-      children: [
-        Icon(
-          isValid ? Icons.check_circle_outline : Icons.error_outline,
-          size: 18,
-          color: color,
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            text,
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: color),
+    final color = isValid ? const Color(0xFF167451) : const Color(0xFFB4233A);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: isValid ? const Color(0xFFEAF7F1) : const Color(0xFFFFF0F1),
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(color: color.withValues(alpha: 0.16)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isValid ? Icons.check_circle_outline : Icons.error_outline,
+            size: 18,
+            color: color,
           ),
-        ),
-      ],
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: color),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -380,9 +395,13 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         : (_sumOfShares - _totalAmount).abs() <= 1;
 
     return Scaffold(
-      backgroundColor: colors.surface,
+      backgroundColor: const Color(0xFFEAF4FB),
       appBar: AppBar(
         title: const Text('Nuevo gasto'),
+        backgroundColor: const Color(0xFFEAF4FB),
+        foregroundColor: const Color(0xFF173B75),
+        elevation: 0,
+        scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
       ),
       body: Center(
@@ -400,13 +419,15 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 18,
-                          vertical: 12,
-                        ),
+                        padding: const EdgeInsets.fromLTRB(17, 12, 17, 6),
                         decoration: BoxDecoration(
-                          color: colors.primaryContainer.withValues(alpha: 0.5),
+                          gradient: const LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [Color(0xFFE8F7FC), Color(0xFFD8EFF8)],
+                          ),
                           borderRadius: BorderRadius.circular(18),
+                          border: Border.all(color: const Color(0xFFC9E5F0)),
                         ),
                         child: TextFormField(
                           controller: _amountController,
@@ -416,17 +437,24 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                           style: theme.textTheme.displaySmall?.copyWith(
                             fontWeight: FontWeight.w700,
                             letterSpacing: -1,
+                            color: const Color(0xFF173B75),
                           ),
                           decoration: InputDecoration(
                             labelText: 'Monto total',
+                            labelStyle: theme.textTheme.bodyMedium?.copyWith(
+                              color: const Color(0xFF526879),
+                            ),
                             prefixText: '\$ ',
                             prefixStyle: theme.textTheme.headlineMedium
                                 ?.copyWith(
-                                  color: colors.primary,
+                                  color: const Color(0xFF2457C5),
                                   fontWeight: FontWeight.w700,
                                 ),
                             filled: false,
-                            contentPadding: EdgeInsets.zero,
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            contentPadding: const EdgeInsets.only(bottom: 8),
                           ),
                           onChanged: (_) => setState(() {}),
                           validator: (value) {
@@ -443,10 +471,34 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                       TextFormField(
                         controller: _descriptionController,
                         textCapitalization: TextCapitalization.sentences,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'Descripción',
                           hintText: 'Ej. Cena o alojamiento del viaje',
-                          prefixIcon: Icon(Icons.edit_note_rounded),
+                          prefixIcon: const Icon(
+                            Icons.edit_note_rounded,
+                            color: Color(0xFF176B87),
+                          ),
+                          filled: true,
+                          fillColor: const Color(0xFFF5FAFD),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(15),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFDCE8EF),
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(15),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFDCE8EF),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(15),
+                            borderSide: const BorderSide(
+                              color: Color(0xFF2457C5),
+                              width: 1.5,
+                            ),
+                          ),
                         ),
                         validator: (value) =>
                             value == null || value.trim().isEmpty
@@ -454,23 +506,74 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                             : null,
                       ),
                       const SizedBox(height: 10),
-                      ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 4,
+                      Material(
+                        color: const Color(0xFFF5FAFD),
+                        borderRadius: BorderRadius.circular(15),
+                        child: InkWell(
+                          onTap: _pickDate,
+                          borderRadius: BorderRadius.circular(15),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 13,
+                              vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(15),
+                              border: Border.all(
+                                color: const Color(0xFFDCE8EF),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 38,
+                                  height: 38,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFE7F3F8),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Icon(
+                                    Icons.calendar_month_rounded,
+                                    color: Color(0xFF176B87),
+                                    size: 20,
+                                  ),
+                                ),
+                                const SizedBox(width: 11),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Fecha del gasto',
+                                        style: theme.textTheme.labelMedium
+                                            ?.copyWith(
+                                              color: const Color(0xFF687C8D),
+                                            ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        DateFormat(
+                                          'dd MMMM yyyy',
+                                          'es',
+                                        ).format(_selectedDate),
+                                        style: theme.textTheme.bodyMedium
+                                            ?.copyWith(
+                                              color: const Color(0xFF173B75),
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: Color(0xFF526879),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                        leading: Icon(
-                          Icons.calendar_month_outlined,
-                          color: colors.primary,
-                        ),
-                        title: const Text('Fecha del gasto'),
-                        subtitle: Text(
-                          DateFormat(
-                            'dd MMMM yyyy',
-                            'es',
-                          ).format(_selectedDate),
-                        ),
-                        trailing: const Icon(Icons.chevron_right_rounded),
-                        onTap: _pickDate,
                       ),
                     ],
                   ),
@@ -489,18 +592,18 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                             iconForCategory(name),
                             size: 18,
                             color: _selectedCategory == name
-                                ? colors.onSecondaryContainer
-                                : colors.onSurfaceVariant,
+                                ? const Color(0xFF176B87)
+                                : const Color(0xFF687C8D),
                           ),
                           label: Text(name),
                           selected: _selectedCategory == name,
                           showCheckmark: false,
-                          selectedColor: colors.secondaryContainer,
-                          backgroundColor: colors.surfaceContainerLow,
+                          selectedColor: const Color(0xFFD9EDF4),
+                          backgroundColor: const Color(0xFFF5FAFD),
                           side: BorderSide(
                             color: _selectedCategory == name
-                                ? colors.primary
-                                : colors.outlineVariant,
+                                ? const Color(0xFF2457C5)
+                                : const Color(0xFFDCE8EF),
                             width: _selectedCategory == name ? 1.5 : 1,
                           ),
                           shape: RoundedRectangleBorder(
@@ -508,8 +611,8 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                           ),
                           labelStyle: theme.textTheme.labelLarge?.copyWith(
                             color: _selectedCategory == name
-                                ? colors.onSecondaryContainer
-                                : colors.onSurface,
+                                ? const Color(0xFF173B75)
+                                : const Color(0xFF526879),
                             fontWeight: _selectedCategory == name
                                 ? FontWeight.w700
                                 : FontWeight.w500,
@@ -542,50 +645,105 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                         final name = widget.group.memberNames[uid] ?? uid;
                         final isSelected = _selectedPayers.contains(uid);
                         return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          child: Row(
-                            children: [
-                              Checkbox(
-                                value: isSelected,
-                                visualDensity: VisualDensity.compact,
-                                onChanged: (selected) {
-                                  setState(() {
-                                    if (selected == true) {
-                                      _selectedPayers.add(uid);
-                                    } else {
-                                      _selectedPayers.remove(uid);
-                                      _payerControllerFor(uid).clear();
-                                    }
-                                  });
-                                },
+                          padding: const EdgeInsets.symmetric(vertical: 3),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? const Color(0xFFF0F8FC)
+                                  : Colors.white,
+                              borderRadius: BorderRadius.circular(15),
+                              border: Border.all(
+                                color: isSelected
+                                    ? const Color(0xFFC9E5F0)
+                                    : const Color(0xFFEDF2F5),
                               ),
-                              _avatar(name, uid),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                            ),
+                            child: Row(
+                              children: [
+                                Checkbox(
+                                  value: isSelected,
+                                  visualDensity: VisualDensity.compact,
+                                  onChanged: (selected) {
+                                    setState(() {
+                                      if (selected == true) {
+                                        _selectedPayers.add(uid);
+                                      } else {
+                                        _selectedPayers.remove(uid);
+                                        _payerControllerFor(uid).clear();
+                                      }
+                                    });
+                                  },
                                 ),
-                              ),
-                              if (isSelected)
-                                SizedBox(
-                                  width: 116,
-                                  child: TextField(
-                                    controller: _payerControllerFor(uid),
-                                    keyboardType:
-                                        const TextInputType.numberWithOptions(
-                                          decimal: true,
-                                        ),
-                                    onChanged: (_) => setState(() {}),
-                                    decoration: const InputDecoration(
-                                      isDense: true,
-                                      prefixText: '\$ ',
-                                      labelText: 'Aportó',
+                                _avatar(name, uid),
+                                const SizedBox(width: 9),
+                                Expanded(
+                                  child: Text(
+                                    name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      color: const Color(0xFF263F55),
+                                      fontWeight: FontWeight.w500,
                                     ),
                                   ),
                                 ),
-                            ],
+                                if (isSelected) ...[
+                                  const SizedBox(width: 6),
+                                  SizedBox(
+                                    width: 112,
+                                    child: TextField(
+                                      controller: _payerControllerFor(uid),
+                                      keyboardType:
+                                          const TextInputType.numberWithOptions(
+                                            decimal: true,
+                                          ),
+                                      onChanged: (_) => setState(() {}),
+                                      decoration: InputDecoration(
+                                        isDense: true,
+                                        prefixText: '\$ ',
+                                        labelText: 'Aportó',
+                                        filled: true,
+                                        fillColor: Colors.white,
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                              horizontal: 9,
+                                              vertical: 10,
+                                            ),
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                          borderSide: const BorderSide(
+                                            color: Color(0xFFDCE8EF),
+                                          ),
+                                        ),
+                                        enabledBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                          borderSide: const BorderSide(
+                                            color: Color(0xFFDCE8EF),
+                                          ),
+                                        ),
+                                        focusedBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                          borderSide: const BorderSide(
+                                            color: Color(0xFF2457C5),
+                                            width: 1.4,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
                           ),
                         );
                       }),
@@ -612,7 +770,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                             child: Text(
                               'Elige a quienes les corresponde una parte.',
                               style: theme.textTheme.bodySmall?.copyWith(
-                                color: colors.onSurfaceVariant,
+                                color: const Color(0xFF687C8D),
                               ),
                             ),
                           ),
@@ -631,68 +789,97 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                         final name = widget.group.memberNames[uid] ?? uid;
                         final selected = _selectedParticipants.contains(uid);
                         return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          child: Row(
-                            children: [
-                              Checkbox(
-                                value: selected,
-                                visualDensity: VisualDensity.compact,
-                                onChanged: (value) {
-                                  setState(() {
-                                    if (value == true) {
-                                      _selectedParticipants.add(uid);
-                                    } else {
-                                      _selectedParticipants.remove(uid);
-                                      _shareControllerFor(uid).clear();
-                                    }
-                                  });
-                                },
+                          padding: const EdgeInsets.symmetric(vertical: 3),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: selected
+                                  ? const Color(0xFFF0F8FC)
+                                  : Colors.white,
+                              borderRadius: BorderRadius.circular(15),
+                              border: Border.all(
+                                color: selected
+                                    ? const Color(0xFFC9E5F0)
+                                    : const Color(0xFFEDF2F5),
                               ),
-                              _avatar(name, uid),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                            ),
+                            child: Row(
+                              children: [
+                                Checkbox(
+                                  value: selected,
+                                  visualDensity: VisualDensity.compact,
+                                  onChanged: (value) {
+                                    setState(() {
+                                      if (value == true) {
+                                        _selectedParticipants.add(uid);
+                                      } else {
+                                        _selectedParticipants.remove(uid);
+                                        _shareControllerFor(uid).clear();
+                                      }
+                                    });
+                                  },
                                 ),
-                              ),
-                              if (selected && _splitMode != _SplitMode.equal)
-                                SizedBox(
-                                  width: 116,
-                                  child: TextField(
-                                    controller: _shareControllerFor(uid),
-                                    keyboardType:
-                                        const TextInputType.numberWithOptions(
-                                          decimal: true,
-                                        ),
-                                    onChanged: (_) => setState(() {}),
-                                    decoration: InputDecoration(
-                                      isDense: true,
-                                      prefixText:
-                                          _splitMode == _SplitMode.custom
-                                          ? '\$ '
-                                          : null,
-                                      suffixText:
-                                          _splitMode == _SplitMode.percentage
-                                          ? '%'
-                                          : null,
-                                      labelText:
-                                          _splitMode == _SplitMode.percentage
-                                          ? 'Porcentaje'
-                                          : 'Monto',
-                                      border: amountFieldBorder,
-                                      enabledBorder: amountFieldBorder,
-                                      focusedBorder: amountFieldBorder.copyWith(
-                                        borderSide: BorderSide(
-                                          color: colors.primary,
-                                          width: 1.5,
-                                        ),
-                                      ),
+                                _avatar(name, uid),
+                                const SizedBox(width: 9),
+                                Expanded(
+                                  child: Text(
+                                    name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      color: const Color(0xFF263F55),
+                                      fontWeight: FontWeight.w500,
                                     ),
                                   ),
                                 ),
-                            ],
+                                if (selected && _splitMode != _SplitMode.equal)
+                                  SizedBox(
+                                    width: 112,
+                                    child: TextField(
+                                      controller: _shareControllerFor(uid),
+                                      keyboardType:
+                                          const TextInputType.numberWithOptions(
+                                            decimal: true,
+                                          ),
+                                      onChanged: (_) => setState(() {}),
+                                      decoration: InputDecoration(
+                                        isDense: true,
+                                        filled: true,
+                                        fillColor: Colors.white,
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                              horizontal: 9,
+                                              vertical: 10,
+                                            ),
+                                        prefixText:
+                                            _splitMode == _SplitMode.custom
+                                            ? '\$ '
+                                            : null,
+                                        suffixText:
+                                            _splitMode == _SplitMode.percentage
+                                            ? '%'
+                                            : null,
+                                        labelText:
+                                            _splitMode == _SplitMode.percentage
+                                            ? 'Porcentaje'
+                                            : 'Monto',
+                                        border: amountFieldBorder,
+                                        enabledBorder: amountFieldBorder,
+                                        focusedBorder: amountFieldBorder
+                                            .copyWith(
+                                              borderSide: const BorderSide(
+                                                color: Color(0xFF2457C5),
+                                                width: 1.4,
+                                              ),
+                                            ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
                         );
                       }),
@@ -790,22 +977,51 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                   ),
                 ],
                 const SizedBox(height: 20),
-                FilledButton.icon(
-                  onPressed: _isLoading ? null : _saveExpense,
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size.fromHeight(56),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(18),
+                Container(
+                  height: 58,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [Color(0xFF2457C5), Color(0xFF087F8C)],
                     ),
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF176B87).withValues(alpha: 0.2),
+                        blurRadius: 14,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
                   ),
-                  icon: _isLoading
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.check_rounded),
-                  label: Text(_isLoading ? 'Guardando...' : 'Guardar gasto'),
+                  child: FilledButton.icon(
+                    onPressed: _isLoading ? null : _saveExpense,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      disabledBackgroundColor: Colors.transparent,
+                      foregroundColor: Colors.white,
+                      disabledForegroundColor: Colors.white70,
+                      minimumSize: const Size.fromHeight(58),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      elevation: 0,
+                      textStyle: theme.textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    icon: _isLoading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.check_rounded),
+                    label: Text(_isLoading ? 'Guardando...' : 'Guardar gasto'),
+                  ),
                 ),
               ],
             ),

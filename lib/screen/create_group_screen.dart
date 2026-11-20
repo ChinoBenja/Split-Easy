@@ -271,10 +271,12 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final fieldBorder = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: BorderSide(color: scheme.outlineVariant),
+      borderRadius: BorderRadius.circular(15),
+      borderSide: const BorderSide(color: Color(0xFFDCE8EF)),
+    );
+    final focusedFieldBorder = fieldBorder.copyWith(
+      borderSide: const BorderSide(color: Color(0xFF2457C5), width: 1.5),
     );
 
     InputDecoration fieldDecoration({
@@ -285,55 +287,88 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
       return InputDecoration(
         labelText: labelText,
         hintText: hintText,
-        prefixIcon: Icon(icon),
+        prefixIcon: Icon(icon, color: const Color(0xFF687C8D)),
         filled: true,
-        fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.45),
+        fillColor: const Color(0xFFF5FAFD),
         border: fieldBorder,
         enabledBorder: fieldBorder,
-        focusedBorder: fieldBorder.copyWith(
-          borderSide: BorderSide(color: scheme.primary, width: 1.5),
-        ),
+        focusedBorder: focusedFieldBorder,
       );
     }
 
     return Scaffold(
-      backgroundColor: scheme.surface,
-      appBar: AppBar(title: const Text('Nuevo grupo')),
+      backgroundColor: const Color(0xFFEAF4FB),
+      appBar: AppBar(
+        title: Text(
+          'Nuevo grupo',
+          style: theme.textTheme.titleLarge?.copyWith(
+            color: const Color(0xFF173B75),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        backgroundColor: const Color(0xFFEAF4FB),
+        foregroundColor: const Color(0xFF173B75),
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
+      ),
       bottomNavigationBar: SafeArea(
         top: false,
-        child: SizedBox(
-          height: 82,
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 560),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
-                child: SizedBox(
-                  height: 54,
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: _isLoading ? null : _createGroup,
-                    style: FilledButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: const Border(top: BorderSide(color: Color(0xFFDCE8EF))),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF173B75).withValues(alpha: 0.06),
+                blurRadius: 12,
+                offset: const Offset(0, -4),
+              ),
+            ],
+          ),
+          child: SizedBox(
+            height: 82,
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 560),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 14),
+                  child: SizedBox(
+                    height: 54,
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: _isLoading ? null : _createGroup,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF2457C5),
+                        foregroundColor: Colors.white,
+                        shape: const StadiumBorder(),
+                        elevation: 0,
+                        textStyle: theme.textTheme.labelLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                      textStyle: theme.textTheme.labelLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 180),
-                      child: _isLoading
-                          ? SizedBox(
-                              key: const ValueKey('loading'),
-                              width: 21,
-                              height: 21,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: scheme.onPrimary,
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 180),
+                        child: _isLoading
+                            ? const SizedBox(
+                                key: ValueKey('loading'),
+                                width: 21,
+                                height: 21,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Row(
+                                key: ValueKey('create'),
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.group_add_rounded, size: 19),
+                                  SizedBox(width: 8),
+                                  Text('Crear grupo'),
+                                ],
                               ),
-                            )
-                          : const Text('Crear grupo', key: ValueKey('create')),
+                      ),
                     ),
                   ),
                 ),
@@ -345,115 +380,40 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 560),
               child: Card(
-                elevation: 2,
-                shadowColor: scheme.shadow.withValues(alpha: 0.12),
-                color: scheme.surfaceContainerLowest,
+                elevation: 1,
+                shadowColor: const Color(0xFF173B75).withValues(alpha: 0.08),
+                color: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(24),
-                  side: BorderSide(
-                    color: scheme.outlineVariant.withValues(alpha: 0.55),
-                  ),
+                  side: const BorderSide(color: Color(0xFFDCE8EF)),
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.all(28),
+                  padding: const EdgeInsets.all(16),
                   child: Form(
                     key: _formKey,
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Center(
-                          child: InkWell(
-                            onTap: _isLoading || _isPickingGroupPhoto
-                                ? null
-                                : _selectGroupPhoto,
-                            customBorder: const CircleBorder(),
-                            child: Stack(
-                              children: [
-                                CircleAvatar(
-                                  radius: 48,
-                                  backgroundColor: scheme.primaryContainer,
-                                  child: ClipOval(
-                                    child: SizedBox.expand(
-                                      child: _groupPhotoBytes == null
-                                          ? Icon(
-                                              Icons.groups_rounded,
-                                              size: 36,
-                                              color: scheme.onPrimaryContainer,
-                                            )
-                                          : ProfilePhotoImage(
-                                              source:
-                                                  'data:$_groupPhotoContentType;base64,${base64Encode(_groupPhotoBytes!)}',
-                                              fallback: Icon(
-                                                Icons.groups_rounded,
-                                                size: 36,
-                                                color:
-                                                    scheme.onPrimaryContainer,
-                                              ),
-                                            ),
-                                    ),
-                                  ),
-                                ),
-                                Positioned(
-                                  right: 0,
-                                  bottom: 0,
-                                  child: CircleAvatar(
-                                    radius: 14,
-                                    backgroundColor: scheme.primary,
-                                    child: Icon(
-                                      _isPickingGroupPhoto
-                                          ? Icons.hourglass_top_rounded
-                                          : Icons.camera_alt_rounded,
-                                      size: 16,
-                                      color: scheme.onPrimary,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        TextButton.icon(
-                          onPressed: _isLoading || _isPickingGroupPhoto
+                        _CreateGroupHero(
+                          photoBytes: _groupPhotoBytes,
+                          photoContentType: _groupPhotoContentType,
+                          isPickingPhoto: _isPickingGroupPhoto,
+                          onSelectPhoto: _isLoading || _isPickingGroupPhoto
                               ? null
                               : _selectGroupPhoto,
-                          icon: Icon(
-                            _groupPhotoBytes == null
-                                ? Icons.add_a_photo_outlined
-                                : Icons.edit_outlined,
-                            size: 18,
-                          ),
-                          label: Text(
-                            _groupPhotoBytes == null
-                                ? 'Añadir foto · opcional'
-                                : 'Cambiar foto',
-                          ),
                         ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Crea un grupo',
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.headlineSmall?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -0.3,
-                            color: scheme.onSurface,
-                          ),
+                        const SizedBox(height: 22),
+                        _FormSectionLabel(
+                          icon: Icons.edit_note_rounded,
+                          title: 'Información del grupo',
+                          subtitle: 'Define el nombre y el propósito',
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Organiza los gastos y compártelos con tus integrantes',
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                            height: 1.4,
-                          ),
-                        ),
-                        const SizedBox(height: 28),
+                        const SizedBox(height: 14),
                         TextFormField(
                           controller: _nameController,
                           textCapitalization: TextCapitalization.sentences,
@@ -481,177 +441,198 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                           maxLines: 3,
                           minLines: 2,
                         ),
-                        const SizedBox(height: 28),
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.people_outline_rounded,
-                              color: scheme.primary,
-                              size: 22,
+                        const SizedBox(height: 24),
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Color(0xFFF2FAFD), Color(0xFFE7F3F8)],
                             ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                'Integrantes e invitaciones',
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                  color: scheme.onSurface,
-                                ),
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 5,
-                              ),
-                              decoration: BoxDecoration(
-                                color: scheme.secondaryContainer,
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                '${_members.length}',
-                                style: theme.textTheme.labelMedium?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                  color: scheme.onSecondaryContainer,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Las personas que agregues recibirán una invitación y deberán aceptarla para unirse.',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: const Color(0xFFD2E7EF)),
                           ),
-                        ),
-                        const SizedBox(height: 14),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextFormField(
-                                controller: _memberEmailController,
-                                keyboardType: TextInputType.emailAddress,
-                                decoration: fieldDecoration(
-                                  labelText: 'Correo del integrante',
-                                  icon: Icons.alternate_email_rounded,
-                                ),
-                                onFieldSubmitted: (_) {
-                                  if (!_isAddingMember) {
-                                    _addMemberByEmail();
-                                  }
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            SizedBox(
-                              width: 52,
-                              height: 52,
-                              child: IconButton.filled(
-                                tooltip: 'Invitar integrante',
-                                onPressed: _isAddingMember
-                                    ? null
-                                    : _addMemberByEmail,
-                                style: IconButton.styleFrom(
-                                  shape: const CircleBorder(),
-                                  backgroundColor: scheme.primary,
-                                  foregroundColor: scheme.onPrimary,
-                                ),
-                                icon: _isAddingMember
-                                    ? SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: scheme.onPrimary,
-                                        ),
-                                      )
-                                    : const Icon(Icons.add_rounded),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-                        if (_members.isEmpty)
-                          Text(
-                            'Añade a las personas con las que compartirás gastos.',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
-                          )
-                        else
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: _members.entries.map((entry) {
-                              final isCreator =
-                                  entry.key ==
-                                  FirebaseAuth.instance.currentUser?.uid;
-                              final member = entry.value;
-                              return InputChip(
-                                avatar: PersonAvatar(
-                                  name: member.displayName,
-                                  photoSource: member.photoSource,
-                                  radius: 16,
-                                  backgroundColor: scheme.primaryContainer,
-                                  foregroundColor: scheme.onPrimaryContainer,
-                                ),
-                                label: Text(
-                                  member.email.isEmpty
-                                      ? member.displayName
-                                      : '${member.displayName} · ${member.email}',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                deleteIcon: const Icon(
-                                  Icons.close_rounded,
-                                  size: 18,
-                                ),
-                                onDeleted: isCreator
-                                    ? null
-                                    : () => setState(
-                                        () => _members.remove(member.uid),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    width: 38,
+                                    height: 38,
+                                    decoration: BoxDecoration(
+                                      gradient: const LinearGradient(
+                                        colors: [
+                                          Color(0xFF2457C5),
+                                          Color(0xFF087F8C),
+                                        ],
                                       ),
-                                backgroundColor: scheme.surfaceContainerHighest,
-                                side: BorderSide(
-                                  color: scheme.outlineVariant.withValues(
-                                    alpha: 0.7,
-                                  ),
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(18),
-                                ),
-                                labelStyle: theme.textTheme.labelLarge
-                                    ?.copyWith(
-                                      color: scheme.onSurface,
-                                      fontWeight: FontWeight.w500,
+                                      borderRadius: BorderRadius.circular(13),
                                     ),
-                                visualDensity: VisualDensity.compact,
-                              );
-                            }).toList(),
+                                    child: const Icon(
+                                      Icons.people_alt_rounded,
+                                      color: Colors.white,
+                                      size: 20,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      'Invita a tu grupo',
+                                      style: theme.textTheme.titleMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w700,
+                                            color: const Color(0xFF173B75),
+                                          ),
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(
+                                        color: const Color(0xFFD2E7EF),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      '${_members.length}',
+                                      style: theme.textTheme.labelMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w700,
+                                            color: const Color(0xFF176B87),
+                                          ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Agrega personas por correo. Recibirán una invitación para unirse.',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: const Color(0xFF526879),
+                                  height: 1.35,
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _memberEmailController,
+                                      keyboardType: TextInputType.emailAddress,
+                                      decoration: fieldDecoration(
+                                        labelText: 'Correo del integrante',
+                                        icon: Icons.alternate_email_rounded,
+                                      ),
+                                      onFieldSubmitted: (_) {
+                                        if (!_isAddingMember) {
+                                          _addMemberByEmail();
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  SizedBox(
+                                    width: 52,
+                                    height: 52,
+                                    child: IconButton.filled(
+                                      tooltip: 'Invitar integrante',
+                                      onPressed: _isAddingMember
+                                          ? null
+                                          : _addMemberByEmail,
+                                      style: IconButton.styleFrom(
+                                        shape: const CircleBorder(),
+                                        backgroundColor: const Color(
+                                          0xFF2457C5,
+                                        ),
+                                        foregroundColor: Colors.white,
+                                      ),
+                                      icon: _isAddingMember
+                                          ? const SizedBox(
+                                              width: 20,
+                                              height: 20,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: Colors.white,
+                                              ),
+                                            )
+                                          : const Icon(Icons.add_rounded),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 13),
+                              if (_members.isEmpty)
+                                Container(
+                                  padding: const EdgeInsets.all(11),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.8),
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: Text(
+                                    'Añade a las personas con las que compartirás gastos.',
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: const Color(0xFF687C8D),
+                                    ),
+                                  ),
+                                )
+                              else
+                                Column(
+                                  children: _members.entries.map((entry) {
+                                    final isCreator =
+                                        entry.key ==
+                                        FirebaseAuth.instance.currentUser?.uid;
+                                    final member = entry.value;
+                                    return Padding(
+                                      padding: const EdgeInsets.only(bottom: 8),
+                                      child: _GroupMemberTile(
+                                        member: member,
+                                        isCreator: isCreator,
+                                        onRemove: isCreator
+                                            ? null
+                                            : () => setState(
+                                                () =>
+                                                    _members.remove(member.uid),
+                                              ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                            ],
                           ),
+                        ),
                         if (_errorMessage != null) ...[
                           const SizedBox(height: 16),
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: scheme.errorContainer,
-                              borderRadius: BorderRadius.circular(12),
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: const Color(
+                                  0xFFD94E61,
+                                ).withValues(alpha: 0.3),
+                              ),
                             ),
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Icon(
+                                const Icon(
                                   Icons.error_outline_rounded,
                                   size: 20,
-                                  color: scheme.onErrorContainer,
+                                  color: Color(0xFFD94E61),
                                 ),
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Text(
                                     _errorMessage!,
                                     style: theme.textTheme.bodySmall?.copyWith(
-                                      color: scheme.onErrorContainer,
+                                      color: const Color(0xFFD94E61),
                                     ),
                                   ),
                                 ),
@@ -669,6 +650,318 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _GroupMemberTile extends StatelessWidget {
+  const _GroupMemberTile({
+    required this.member,
+    required this.isCreator,
+    required this.onRemove,
+  });
+
+  final _GroupMember member;
+  final bool isCreator;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5FAFD),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFDCE8EF)),
+      ),
+      child: Row(
+        children: [
+          PersonAvatar(
+            name: member.displayName,
+            photoSource: member.photoSource,
+            radius: 19,
+            backgroundColor: const Color(0xFFD9EDF4),
+            foregroundColor: const Color(0xFF176B87),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  member.displayName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: const Color(0xFF173B75),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (member.email.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    member.email,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: const Color(0xFF687C8D),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          if (isCreator)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE7F3F8),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                'Tú',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: const Color(0xFF087F8C),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            )
+          else
+            IconButton(
+              onPressed: onRemove,
+              tooltip: 'Quitar integrante',
+              visualDensity: VisualDensity.compact,
+              style: IconButton.styleFrom(
+                foregroundColor: const Color(0xFF687C8D),
+              ),
+              icon: const Icon(Icons.close_rounded, size: 19),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CreateGroupHero extends StatelessWidget {
+  const _CreateGroupHero({
+    required this.photoBytes,
+    required this.photoContentType,
+    required this.isPickingPhoto,
+    required this.onSelectPhoto,
+  });
+
+  final List<int>? photoBytes;
+  final String photoContentType;
+  final bool isPickingPhoto;
+  final VoidCallback? onSelectPhoto;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final photoSource = photoBytes == null
+        ? null
+        : 'data:$photoContentType;base64,${base64Encode(photoBytes!)}';
+
+    return Container(
+      height: 190,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF2457C5), Color(0xFF087F8C)],
+        ),
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            top: -50,
+            right: -24,
+            child: Container(
+              width: 150,
+              height: 150,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.09),
+              ),
+            ),
+          ),
+          Positioned(
+            left: -44,
+            bottom: -82,
+            child: Container(
+              width: 190,
+              height: 190,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.07),
+              ),
+            ),
+          ),
+          Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Semantics(
+                  button: true,
+                  label: photoSource == null
+                      ? 'Añadir foto del grupo'
+                      : 'Cambiar foto del grupo',
+                  child: GestureDetector(
+                    onTap: onSelectPhoto,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Container(
+                          width: 76,
+                          height: 76,
+                          padding: const EdgeInsets.all(3),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.85),
+                              width: 2,
+                            ),
+                          ),
+                          child: ClipOval(
+                            child: photoSource == null
+                                ? Container(
+                                    color: Colors.white.withValues(alpha: 0.18),
+                                    child: const Icon(
+                                      Icons.groups_rounded,
+                                      color: Colors.white,
+                                      size: 38,
+                                    ),
+                                  )
+                                : ProfilePhotoImage(
+                                    source: photoSource,
+                                    fallback: Container(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.18,
+                                      ),
+                                      child: const Icon(
+                                        Icons.groups_rounded,
+                                        color: Colors.white,
+                                        size: 38,
+                                      ),
+                                    ),
+                                  ),
+                          ),
+                        ),
+                        Positioned(
+                          right: -2,
+                          bottom: -1,
+                          child: Container(
+                            width: 28,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: const Color(0xFFB7DCE8),
+                              ),
+                            ),
+                            child: isPickingPhoto
+                                ? const Padding(
+                                    padding: EdgeInsets.all(6),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Color(0xFF087F8C),
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.add_a_photo_rounded,
+                                    size: 15,
+                                    color: Color(0xFF176B87),
+                                  ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 11),
+                Text(
+                  'Crea tu espacio compartido',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'Organiza planes y gastos en equipo',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: Colors.white.withValues(alpha: 0.88),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FormSectionLabel extends StatelessWidget {
+  const _FormSectionLabel({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: const Color(0xFFE7F3F8),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Icon(icon, color: const Color(0xFF176B87), size: 23),
+        ),
+        const SizedBox(width: 11),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF173B75),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: const Color(0xFF687C8D),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
