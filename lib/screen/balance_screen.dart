@@ -1,9 +1,15 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../../models/expense_model.dart';
 import '../../models/group_model.dart';
 import '../../models/balance_model.dart';
+import '../../models/settlement_record_model.dart';
 import '../../services/firestore_service.dart';
 import '../widgets/main_navigation_bar.dart';
 import '../widgets/person_avatar.dart';
@@ -31,6 +37,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
   );
   late final Future<Map<String, String>> _memberPhotoUrls;
   Future<String?>? _userPhotoFuture;
+  bool _isRegisteringSettlement = false;
 
   @override
   void initState() {
@@ -76,94 +83,121 @@ class _BalanceScreenState extends State<BalanceScreen> {
               isError: true,
             );
           }
-          if (!snapshot.hasData) {
+          final expenses = snapshot.data;
+          if (!snapshot.hasData || expenses == null) {
             return const Center(
               child: CircularProgressIndicator(color: Color(0xFF2457C5)),
             );
           }
 
-          final expenses = snapshot.data!;
-          final balances = _firestoreService.calculateBalances(
-            group: widget.group,
-            expenses: expenses,
-          );
-          final settlements = _firestoreService.simplifyDebts(balances);
+          return StreamBuilder<List<SettlementRecord>>(
+            stream: _firestoreService.watchGroupSettlements(widget.group.id),
+            builder: (context, settlementSnapshot) {
+              if (settlementSnapshot.hasError) {
+                return _BalanceMessage(
+                  icon: Icons.cloud_off_rounded,
+                  title: 'No se pudieron cargar los pagos registrados',
+                  message:
+                      'Revisa tu conexión e inténtalo nuevamente.\n${settlementSnapshot.error}',
+                  isError: true,
+                );
+              }
+              final recordedSettlements = settlementSnapshot.data;
+              if (!settlementSnapshot.hasData || recordedSettlements == null) {
+                return const Center(
+                  child: CircularProgressIndicator(color: Color(0xFF2457C5)),
+                );
+              }
+              final balances = _firestoreService.calculateBalances(
+                group: widget.group,
+                expenses: expenses,
+                settlements: recordedSettlements,
+              );
+              final suggestedSettlements = _firestoreService.simplifyDebts(
+                balances,
+              );
 
-          if (expenses.isEmpty) {
-            return _BalanceMessage(
-              icon: Icons.account_balance_wallet_outlined,
-              title: 'Aún no hay gastos',
-              message:
-                  'Cuando el grupo registre gastos, aquí podrás revisar los saldos y las liquidaciones sugeridas.',
-            );
-          }
+              if (expenses.isEmpty) {
+                return _BalanceMessage(
+                  icon: Icons.account_balance_wallet_outlined,
+                  title: 'Aún no hay gastos',
+                  message:
+                      'Cuando el grupo registre gastos, aquí podrás revisar los saldos y las liquidaciones sugeridas.',
+                );
+              }
 
-          return Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 880),
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-                children: [
-                  _BalanceHeader(
-                    groupName: widget.group.name,
-                    memberCount: balances.length,
-                    settlementCount: settlements.length,
-                  ),
-                  const SizedBox(height: 16),
-                  _BalanceSummaryStrip(
-                    totalExpenses: expenses.fold<double>(
-                      0,
-                      (total, expense) => total + expense.amount,
-                    ),
-                    totalToSettle: settlements.fold<double>(
-                      0,
-                      (total, settlement) => total + settlement.amount,
-                    ),
-                    currencyFormat: _currencyFormat,
-                  ),
-                  const SizedBox(height: 24),
-                  _SectionHeading(
-                    title: 'Balance por integrante',
-                    subtitle: 'Aportes, gastos asignados y saldo individual',
-                    icon: Icons.groups_2_rounded,
-                    trailingLabel: '${balances.length}',
-                  ),
-                  const SizedBox(height: 12),
-                  ...balances.map(
-                    (balance) => Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: _BalanceTile(
-                        balance: balance,
-                        currencyFormat: _currencyFormat,
-                        memberPhotoUrls: _memberPhotoUrls,
+              return Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 880),
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+                    children: [
+                      _BalanceHeader(
+                        groupName: widget.group.name,
+                        memberCount: balances.length,
+                        settlementCount: suggestedSettlements.length,
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  _SectionHeading(
-                    title: 'Liquidación sugerida',
-                    subtitle:
-                        'El mínimo de pagos para que todos queden a mano.',
-                    icon: Icons.swap_horiz_rounded,
-                    trailingLabel: '${settlements.length}',
-                  ),
-                  const SizedBox(height: 12),
-                  if (settlements.isEmpty)
-                    const _SettledCard()
-                  else
-                    ...settlements.map(
-                      (settlement) => Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: _SettlementTile(
-                          settlement: settlement,
-                          currencyFormat: _currencyFormat,
-                          memberPhotoUrls: _memberPhotoUrls,
+                      const SizedBox(height: 16),
+                      _BalanceSummaryStrip(
+                        totalExpenses: expenses.fold<double>(
+                          0,
+                          (total, expense) => total + expense.amount,
+                        ),
+                        totalToSettle: suggestedSettlements.fold<double>(
+                          0,
+                          (total, settlement) => total + settlement.amount,
+                        ),
+                        currencyFormat: _currencyFormat,
+                      ),
+                      const SizedBox(height: 24),
+                      _SectionHeading(
+                        title: 'Balance por integrante',
+                        subtitle:
+                            'Aportes, gastos asignados y saldo individual',
+                        icon: Icons.groups_2_rounded,
+                        trailingLabel: '${balances.length}',
+                      ),
+                      const SizedBox(height: 12),
+                      ...balances.map(
+                        (balance) => Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: _BalanceTile(
+                            balance: balance,
+                            currencyFormat: _currencyFormat,
+                            memberPhotoUrls: _memberPhotoUrls,
+                          ),
                         ),
                       ),
-                    ),
-                ],
-              ),
-            ),
+                      const SizedBox(height: 14),
+                      _SectionHeading(
+                        title: 'Liquidación sugerida',
+                        subtitle:
+                            'El mínimo de pagos para que todos queden a mano.',
+                        icon: Icons.swap_horiz_rounded,
+                        trailingLabel: '${suggestedSettlements.length}',
+                      ),
+                      const SizedBox(height: 12),
+                      if (suggestedSettlements.isEmpty)
+                        const _SettledCard()
+                      else
+                        ...suggestedSettlements.map(
+                          (settlement) => Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: _SettlementTile(
+                              settlement: settlement,
+                              currencyFormat: _currencyFormat,
+                              memberPhotoUrls: _memberPhotoUrls,
+                              onRegisterPayment: _isRegisteringSettlement
+                                  ? null
+                                  : () => _registerSettlement(settlement),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            },
           );
         },
       ),
@@ -179,6 +213,45 @@ class _BalanceScreenState extends State<BalanceScreen> {
         profilePhotoFuture: _userPhotoFuture ?? Future<String?>.value(null),
       ),
     );
+  }
+
+  Future<void> _registerSettlement(SettlementTransaction settlement) async {
+    if (_isRegisteringSettlement) return;
+    setState(() => _isRegisteringSettlement = true);
+    try {
+      final draft = await showDialog<_SettlementDraft>(
+        context: context,
+        builder: (context) => _RegisterSettlementDialog(
+          settlement: settlement,
+          currencyFormat: _currencyFormat,
+        ),
+      );
+      if (!mounted || draft == null) return;
+      await _firestoreService.registerSettlement(
+        groupId: widget.group.id,
+        fromUid: settlement.fromUid,
+        toUid: settlement.toUid,
+        amount: draft.amount,
+        note: draft.note,
+        imageBase64: draft.imageBase64,
+        imageContentType: draft.imageContentType,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Pago registrado. El balance del grupo fue actualizado.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo registrar el pago: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _isRegisteringSettlement = false);
+    }
   }
 
   Future<void> _openGroups() async {
@@ -602,7 +675,7 @@ class _SectionHeading extends StatelessWidget {
             ],
           ),
         ),
-        if (trailingLabel != null)
+        if (trailingLabel case final label?)
           Container(
             constraints: const BoxConstraints(minWidth: 32),
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -611,7 +684,7 @@ class _SectionHeading extends StatelessWidget {
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
-              trailingLabel!,
+              label,
               textAlign: TextAlign.center,
               style: theme.textTheme.labelLarge?.copyWith(
                 color: const Color(0xFF087F8C),
@@ -781,6 +854,16 @@ class _BalanceTile extends StatelessWidget {
                                     balance.totalOwed,
                                   ),
                                 ),
+                                const SizedBox(height: 4),
+                                _BalanceMiniMetric(
+                                  label: 'Pagos netos',
+                                  value:
+                                      '${balance.settlementAdjustment > 0
+                                          ? '+'
+                                          : balance.settlementAdjustment < 0
+                                          ? '−'
+                                          : ''}${currencyFormat.format(balance.settlementAdjustment.abs())}',
+                                ),
                               ],
                             ),
                           ],
@@ -828,179 +911,553 @@ class _SettlementTile extends StatelessWidget {
     required this.settlement,
     required this.currencyFormat,
     required this.memberPhotoUrls,
+    required this.onRegisterPayment,
   });
 
   final SettlementTransaction settlement;
   final NumberFormat currencyFormat;
   final Future<Map<String, String>> memberPhotoUrls;
+  final VoidCallback? onRegisterPayment;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return FutureBuilder<Map<String, String>>(
       future: memberPhotoUrls,
-      builder: (context, snapshot) => Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Colors.white, Color(0xFFF7FBFD)],
-          ),
-          borderRadius: BorderRadius.circular(21),
-          border: Border.all(color: const Color(0xFFDCE8EF)),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF173B75).withValues(alpha: 0.06),
-              blurRadius: 14,
-              offset: const Offset(0, 5),
+      builder: (context, snapshot) {
+        final photoUrls =
+            snapshot.connectionState == ConnectionState.done &&
+                !snapshot.hasError
+            ? snapshot.data ?? const <String, String>{}
+            : const <String, String>{};
+        return Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Colors.white, Color(0xFFF7FBFD)],
             ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE7F3F8),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    'PAGO SUGERIDO',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: const Color(0xFF087F8C),
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.45,
-                    ),
-                  ),
-                ),
-                const Spacer(),
-                const Icon(
-                  Icons.auto_awesome_rounded,
-                  size: 16,
-                  color: Color(0xFF78A9BB),
-                ),
-                const SizedBox(width: 5),
-                Text(
-                  'Liquidación simple',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: const Color(0xFF8093A1),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 13),
-            Row(
-              children: [
-                PersonAvatar(
-                  name: settlement.fromName,
-                  photoSource: snapshot.data?[settlement.fromUid],
-                  radius: 22,
-                  backgroundColor: const Color(0xFFE2F0F6),
-                  foregroundColor: const Color(0xFF35536D),
-                ),
-                const SizedBox(width: 9),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        settlement.fromName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          color: const Color(0xFF173B75),
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      Text(
-                        'paga a',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: const Color(0xFF8093A1),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  width: 34,
-                  height: 34,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFE5F4F2),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.arrow_forward_rounded,
-                    size: 18,
-                    color: Color(0xFF087F8C),
-                  ),
-                ),
-                const SizedBox(width: 9),
-                PersonAvatar(
-                  name: settlement.toName,
-                  photoSource: snapshot.data?[settlement.toUid],
-                  radius: 22,
-                  backgroundColor: const Color(0xFFE5F4F2),
-                  foregroundColor: const Color(0xFF087F8C),
-                ),
-                const SizedBox(width: 9),
-                Expanded(
-                  child: Text(
-                    settlement.toName,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      color: const Color(0xFF173B75),
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 13),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-              decoration: BoxDecoration(
-                color: const Color(0xFFEAF6F5),
-                borderRadius: BorderRadius.circular(13),
+            borderRadius: BorderRadius.circular(21),
+            border: Border.all(color: const Color(0xFFDCE8EF)),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF173B75).withValues(alpha: 0.06),
+                blurRadius: 14,
+                offset: const Offset(0, 5),
               ),
-              child: Row(
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  const Icon(
-                    Icons.payments_outlined,
-                    size: 18,
-                    color: Color(0xFF087F8C),
-                  ),
-                  const SizedBox(width: 7),
-                  Text(
-                    'Monto a transferir',
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: const Color(0xFF526879),
-                      fontWeight: FontWeight.w600,
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 9,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE7F3F8),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      'PAGO SUGERIDO',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: const Color(0xFF087F8C),
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.45,
+                      ),
                     ),
                   ),
                   const Spacer(),
+                  const Icon(
+                    Icons.auto_awesome_rounded,
+                    size: 16,
+                    color: Color(0xFF78A9BB),
+                  ),
+                  const SizedBox(width: 5),
                   Text(
-                    currencyFormat.format(settlement.amount),
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: const Color(0xFF087F8C),
-                      fontWeight: FontWeight.w900,
+                    'Liquidación simple',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: const Color(0xFF8093A1),
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
               ),
+              const SizedBox(height: 13),
+              Row(
+                children: [
+                  PersonAvatar(
+                    name: settlement.fromName,
+                    photoSource: photoUrls[settlement.fromUid],
+                    radius: 22,
+                    backgroundColor: const Color(0xFFE2F0F6),
+                    foregroundColor: const Color(0xFF35536D),
+                  ),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          settlement.fromName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: const Color(0xFF173B75),
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          'paga a',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: const Color(0xFF8093A1),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFE5F4F2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.arrow_forward_rounded,
+                      size: 18,
+                      color: Color(0xFF087F8C),
+                    ),
+                  ),
+                  const SizedBox(width: 9),
+                  PersonAvatar(
+                    name: settlement.toName,
+                    photoSource: photoUrls[settlement.toUid],
+                    radius: 22,
+                    backgroundColor: const Color(0xFFE5F4F2),
+                    foregroundColor: const Color(0xFF087F8C),
+                  ),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Text(
+                      settlement.toName,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        color: const Color(0xFF173B75),
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 13),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 9,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEAF6F5),
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.payments_outlined,
+                      size: 18,
+                      color: Color(0xFF087F8C),
+                    ),
+                    const SizedBox(width: 7),
+                    Text(
+                      'Monto a transferir',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: const Color(0xFF526879),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      currencyFormat.format(settlement.amount),
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: const Color(0xFF087F8C),
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 11),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: onRegisterPayment,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF2457C5),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  icon: const Icon(Icons.receipt_long_rounded, size: 18),
+                  label: const Text('Registrar pago o abono'),
+                ),
+              ),
+              const SizedBox(height: 7),
+              Center(
+                child: Text(
+                  'Solo queda constancia; no se transfiere dinero desde la app.',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: const Color(0xFF8093A1),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _SettlementDraft {
+  const _SettlementDraft({
+    required this.amount,
+    required this.note,
+    required this.imageBase64,
+    required this.imageContentType,
+  });
+
+  final double amount;
+  final String? note;
+  final String? imageBase64;
+  final String? imageContentType;
+}
+
+class _RegisterSettlementDialog extends StatefulWidget {
+  const _RegisterSettlementDialog({
+    required this.settlement,
+    required this.currencyFormat,
+  });
+
+  final SettlementTransaction settlement;
+  final NumberFormat currencyFormat;
+
+  @override
+  State<_RegisterSettlementDialog> createState() =>
+      _RegisterSettlementDialogState();
+}
+
+class _RegisterSettlementDialogState extends State<_RegisterSettlementDialog> {
+  late final TextEditingController _amountController = TextEditingController(
+    text: widget.settlement.amount % 1 == 0
+        ? widget.settlement.amount.toStringAsFixed(0)
+        : widget.settlement.amount.toStringAsFixed(2),
+  );
+  final _noteController = TextEditingController();
+  Uint8List? _imageBytes;
+  String? _imageBase64;
+  String? _imageContentType;
+  String? _validationMessage;
+  bool _isPickingImage = false;
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickReceipt() async {
+    if (_isPickingImage) return;
+    setState(() {
+      _isPickingImage = true;
+      _validationMessage = null;
+    });
+    try {
+      final image = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1200,
+        maxHeight: 1200,
+        imageQuality: 75,
+      );
+      if (!mounted || image == null) return;
+      final bytes = await image.readAsBytes().timeout(
+        const Duration(seconds: 30),
+        onTimeout: () => throw TimeoutException(
+          'No se pudo leer la imagen del dispositivo.',
+        ),
+      );
+      final encodedImage = base64Encode(bytes);
+      if (encodedImage.length > FirestoreService.maxChatImageBase64Length) {
+        setState(() {
+          _imageBytes = null;
+          _imageBase64 = null;
+          _imageContentType = null;
+          _validationMessage =
+              'El comprobante comprimido supera los 700 KB. '
+              'Recórtalo o selecciona una imagen más liviana.';
+        });
+        return;
+      }
+      setState(() {
+        _imageBytes = bytes;
+        _imageBase64 = encodedImage;
+        final mimeType = image.mimeType;
+        _imageContentType = mimeType != null && mimeType.startsWith('image/')
+            ? mimeType
+            : 'image/jpeg';
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _validationMessage = 'No se pudo adjuntar el comprobante: $error';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _isPickingImage = false);
+    }
+  }
+
+  void _submit() {
+    final amount = double.tryParse(
+      _amountController.text.trim().replaceAll(',', '.'),
+    );
+    if (amount == null || !amount.isFinite || amount <= 0) {
+      setState(
+        () => _validationMessage = 'Ingresa un monto válido mayor que 0.',
+      );
+      return;
+    }
+    if (amount > widget.settlement.amount + 0.01) {
+      setState(
+        () => _validationMessage =
+            'El abono no puede superar la deuda pendiente '
+            '(${widget.currencyFormat.format(widget.settlement.amount)}).',
+      );
+      return;
+    }
+    Navigator.of(context).pop(
+      _SettlementDraft(
+        amount: amount,
+        note: _noteController.text.trim().isEmpty
+            ? null
+            : _noteController.text.trim(),
+        imageBase64: _imageBase64,
+        imageContentType: _imageContentType,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      titlePadding: const EdgeInsets.fromLTRB(22, 21, 20, 0),
+      contentPadding: const EdgeInsets.fromLTRB(22, 14, 22, 8),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      title: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: const Color(0xFFE7F3F8),
+              borderRadius: BorderRadius.circular(13),
             ),
-          ],
+            child: const Icon(
+              Icons.receipt_long_rounded,
+              color: Color(0xFF087F8C),
+            ),
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Text(
+              'Registrar pago',
+              style: theme.textTheme.titleLarge?.copyWith(
+                color: const Color(0xFF173B75),
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${widget.settlement.fromName} → ${widget.settlement.toName}',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: const Color(0xFF35536D),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                'Deuda pendiente: ${widget.currencyFormat.format(widget.settlement.amount)}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: const Color(0xFF687C8D),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _amountController,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: InputDecoration(
+                  labelText: 'Monto pagado o abonado',
+                  prefixText: '\$ ',
+                  filled: true,
+                  fillColor: const Color(0xFFF3F8FB),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(15),
+                    borderSide: const BorderSide(color: Color(0xFFDCE8EF)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(15),
+                    borderSide: const BorderSide(color: Color(0xFFDCE8EF)),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _noteController,
+                maxLength: FirestoreService.maxSettlementNoteLength,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  labelText: 'Nota (opcional)',
+                  hintText: 'Ej. Transferencia del 22 de noviembre',
+                  alignLabelWithHint: true,
+                  filled: true,
+                  fillColor: const Color(0xFFF3F8FB),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(15),
+                    borderSide: const BorderSide(color: Color(0xFFDCE8EF)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(15),
+                    borderSide: const BorderSide(color: Color(0xFFDCE8EF)),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              if (_imageBytes case final imageBytes?) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: Image.memory(
+                    imageBytes,
+                    height: 150,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () => setState(() {
+                      _imageBytes = null;
+                      _imageBase64 = null;
+                      _imageContentType = null;
+                    }),
+                    icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                    label: const Text('Quitar comprobante'),
+                  ),
+                ),
+              ] else
+                OutlinedButton.icon(
+                  onPressed: _isPickingImage ? null : _pickReceipt,
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48),
+                    foregroundColor: const Color(0xFF087F8C),
+                    side: const BorderSide(color: Color(0xFFB7DCE8)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  icon: _isPickingImage
+                      ? const SizedBox(
+                          width: 17,
+                          height: 17,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.add_photo_alternate_rounded),
+                  label: Text(
+                    _isPickingImage
+                        ? 'Preparando imagen...'
+                        : 'Adjuntar comprobante',
+                  ),
+                ),
+              if (_validationMessage case final validationMessage?) ...[
+                const SizedBox(height: 10),
+                Text(
+                  validationMessage,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: const Color(0xFFD94E61),
+                    height: 1.35,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(11),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF6E8),
+                  borderRadius: BorderRadius.circular(13),
+                  border: Border.all(color: const Color(0xFFF3D7A7)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.info_outline_rounded,
+                      size: 18,
+                      color: Color(0xFFB27216),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Esto solo registra el pago para el grupo. La app no realiza transferencias.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: const Color(0xFF77551F),
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton.icon(
+          onPressed: _isPickingImage ? null : _submit,
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFF2457C5),
+            foregroundColor: Colors.white,
+          ),
+          icon: const Icon(Icons.check_rounded, size: 18),
+          label: const Text('Guardar registro'),
+        ),
+      ],
     );
   }
 }

@@ -6,13 +6,15 @@ class MemberBalance {
   final String name;
   final double totalPaid;
   final double totalOwed;
-  double get balance => totalPaid - totalOwed;
+  final double settlementAdjustment;
+  double get balance => totalPaid - totalOwed + settlementAdjustment;
 
   MemberBalance({
     required this.uid,
     required this.name,
     required this.totalPaid,
     required this.totalOwed,
+    this.settlementAdjustment = 0,
   });
 }
 

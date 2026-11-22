@@ -27,20 +27,40 @@ class GroupModel {
   });
 
   factory GroupModel.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+    final rawData = doc.data();
+    final data = rawData is Map ? rawData : const <Object?, Object?>{};
     return GroupModel(
       id: doc.id,
-      name: data['name'] ?? '',
-      description: data['description'] ?? '',
-      createdBy: data['createdBy'] ?? '',
-      memberIds: List<String>.from(data['memberIds'] ?? []),
-      invitedIds: List<String>.from(data['invitedIds'] ?? []),
-      memberNames: Map<String, String>.from(data['memberNames'] ?? {}),
+      name: _stringValue(data['name']),
+      description: _stringValue(data['description']),
+      createdBy: _stringValue(data['createdBy']),
+      memberIds: _stringList(data['memberIds']),
+      invitedIds: _stringList(data['invitedIds']),
+      memberNames: _stringMap(data['memberNames']),
       photoSource: _photoSource(data),
-      customCategories: List<String>.from(data['customCategories'] ?? []),
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      customCategories: _stringList(data['customCategories']),
+      createdAt: _dateValue(data['createdAt']) ?? DateTime.now(),
     );
   }
+
+  static String _stringValue(Object? value) => value is String ? value : '';
+
+  static List<String> _stringList(Object? value) {
+    if (value is! Iterable) return <String>[];
+    return value.whereType<String>().where((item) => item.isNotEmpty).toList();
+  }
+
+  static Map<String, String> _stringMap(Object? value) {
+    if (value is! Map) return <String, String>{};
+    return {
+      for (final entry in value.entries)
+        if (entry.key case final String key)
+          if (entry.value case final String item) key: item,
+    };
+  }
+
+  static DateTime? _dateValue(Object? value) =>
+      value is Timestamp ? value.toDate() : null;
 
   Map<String, dynamic> toMap() {
     String? photoBase64;
@@ -69,7 +89,7 @@ class GroupModel {
     return data;
   }
 
-  static String? _photoSource(Map<String, dynamic> data) {
+  static String? _photoSource(Map<Object?, Object?> data) {
     final photoBase64 = data['photoBase64'];
     if (photoBase64 is! String || photoBase64.isEmpty) return null;
     final contentType = data['photoContentType'];

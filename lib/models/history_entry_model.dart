@@ -12,9 +12,15 @@ class HistoryEntry {
   // 'created' | 'edit_proposed' | 'edit_approved' | 'edit_rejected'
   // 'delete_proposed' | 'delete_approved' | 'delete_rejected'
   // 'deleted_free' | 'settlement_requested' | 'settlement_confirmed'
+  // 'settlement_recorded'
   final String performedBy;
   final String performedByName;
   final String? details;
+  final String? settlementId;
+  final double? settlementAmount;
+  final String? settlementFromName;
+  final String? settlementToName;
+  final bool hasSettlementReceipt;
   final DateTime createdAt;
 
   HistoryEntry({
@@ -25,6 +31,11 @@ class HistoryEntry {
     required this.performedBy,
     required this.performedByName,
     this.details,
+    this.settlementId,
+    this.settlementAmount,
+    this.settlementFromName,
+    this.settlementToName,
+    this.hasSettlementReceipt = false,
     required this.createdAt,
   });
 
@@ -38,6 +49,11 @@ class HistoryEntry {
       performedBy: data['performedBy'] ?? '',
       performedByName: data['performedByName'] ?? '',
       details: data['details'],
+      settlementId: data['settlementId'] as String?,
+      settlementAmount: (data['settlementAmount'] as num?)?.toDouble(),
+      settlementFromName: data['settlementFromName'] as String?,
+      settlementToName: data['settlementToName'] as String?,
+      hasSettlementReceipt: data['hasSettlementReceipt'] == true,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
   }

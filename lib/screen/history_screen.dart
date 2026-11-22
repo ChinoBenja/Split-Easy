@@ -1,8 +1,12 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../models/group_model.dart';
 import '../../models/history_entry_model.dart';
+import '../../models/settlement_record_model.dart';
 import '../../services/firestore_service.dart';
 import '../widgets/main_navigation_bar.dart';
 import 'add_expense_screen.dart';
@@ -102,6 +106,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                             dateLabel: dateFormat.format(entry.createdAt),
                             config: _configFor(entry.action),
                             isLast: index == entries.length - 1,
+                            groupId: widget.group.id,
                           );
                         }),
                       ],
@@ -218,6 +223,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
           Color(0xFF2E9D68),
           'confirmó pago en',
           'PAGO CONFIRMADO',
+        );
+      case 'settlement_recorded':
+        return const _HistoryConfig(
+          Icons.receipt_long_rounded,
+          Color(0xFF087F8C),
+          'registró un pago',
+          'PAGO REGISTRADO',
         );
       default:
         return const _HistoryConfig(
@@ -530,12 +542,14 @@ class _HistoryTimelineItem extends StatelessWidget {
     required this.dateLabel,
     required this.config,
     required this.isLast,
+    required this.groupId,
   });
 
   final HistoryEntry entry;
   final String dateLabel;
   final _HistoryConfig config;
   final bool isLast;
+  final String groupId;
 
   @override
   Widget build(BuildContext context) {
@@ -596,6 +610,7 @@ class _HistoryTimelineItem extends StatelessWidget {
                 entry: entry,
                 dateLabel: dateLabel,
                 config: config,
+                groupId: groupId,
               ),
             ),
           ),
@@ -610,11 +625,13 @@ class _HistoryEntryCard extends StatelessWidget {
     required this.entry,
     required this.dateLabel,
     required this.config,
+    required this.groupId,
   });
 
   final HistoryEntry entry;
   final String dateLabel;
   final _HistoryConfig config;
+  final String groupId;
 
   @override
   Widget build(BuildContext context) {
@@ -679,31 +696,82 @@ class _HistoryEntryCard extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 9),
-                    Text.rich(
-                      TextSpan(
-                        children: [
-                          TextSpan(
-                            text: entry.performedByName,
-                            style: TextStyle(
-                              color: titleColor,
-                              fontWeight: FontWeight.w800,
+                    if (entry.action == 'settlement_recorded')
+                      Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: entry.performedByName,
+                              style: TextStyle(
+                                color: titleColor,
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
-                          ),
-                          TextSpan(
-                            text: ' ${config.verb} ',
-                            style: const TextStyle(color: Color(0xFF526879)),
-                          ),
-                          TextSpan(
-                            text: '"${entry.expenseDescription}"',
-                            style: TextStyle(
-                              color: titleColor,
-                              fontWeight: FontWeight.w700,
+                            const TextSpan(
+                              text: ' registró que ',
+                              style: TextStyle(color: Color(0xFF526879)),
                             ),
-                          ),
-                        ],
+                            TextSpan(
+                              text: entry.settlementFromName ?? 'Un integrante',
+                              style: TextStyle(
+                                color: titleColor,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const TextSpan(
+                              text: ' pagó a ',
+                              style: TextStyle(color: Color(0xFF526879)),
+                            ),
+                            TextSpan(
+                              text: entry.settlementToName ?? 'otro integrante',
+                              style: TextStyle(
+                                color: titleColor,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            if (entry.settlementAmount != null)
+                              TextSpan(
+                                text:
+                                    ' ${NumberFormat.currency(locale: 'es_CL', symbol: '\$', decimalDigits: 0).format(entry.settlementAmount)}',
+                                style: TextStyle(
+                                  color: titleColor,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                          ],
+                        ),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          height: 1.35,
+                        ),
+                      )
+                    else
+                      Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: entry.performedByName,
+                              style: TextStyle(
+                                color: titleColor,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            TextSpan(
+                              text: ' ${config.verb} ',
+                              style: const TextStyle(color: Color(0xFF526879)),
+                            ),
+                            TextSpan(
+                              text: '"${entry.expenseDescription}"',
+                              style: TextStyle(
+                                color: titleColor,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          height: 1.35,
+                        ),
                       ),
-                      style: theme.textTheme.bodyMedium?.copyWith(height: 1.35),
-                    ),
                     if (details != null && details.isNotEmpty) ...[
                       const SizedBox(height: 7),
                       Text(
@@ -714,11 +782,149 @@ class _HistoryEntryCard extends StatelessWidget {
                         ),
                       ),
                     ],
+                    if (entry.hasSettlementReceipt &&
+                        entry.settlementId != null) ...[
+                      const SizedBox(height: 9),
+                      _HistorySettlementReceipt(
+                        groupId: groupId,
+                        settlementId: entry.settlementId!,
+                      ),
+                    ],
                   ],
                 ),
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HistorySettlementReceipt extends StatefulWidget {
+  const _HistorySettlementReceipt({
+    required this.groupId,
+    required this.settlementId,
+  });
+
+  final String groupId;
+  final String settlementId;
+
+  @override
+  State<_HistorySettlementReceipt> createState() =>
+      _HistorySettlementReceiptState();
+}
+
+class _HistorySettlementReceiptState extends State<_HistorySettlementReceipt> {
+  late Future<SettlementReceipt?> _receiptFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRecord();
+  }
+
+  @override
+  void didUpdateWidget(covariant _HistorySettlementReceipt oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.groupId != widget.groupId ||
+        oldWidget.settlementId != widget.settlementId) {
+      _loadRecord();
+    }
+  }
+
+  void _loadRecord() {
+    _receiptFuture = FirestoreService().getSettlementReceipt(
+      groupId: widget.groupId,
+      settlementId: widget.settlementId,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<SettlementReceipt?>(
+      future: _receiptFuture,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const Text(
+            'No se pudo cargar el comprobante.',
+            style: TextStyle(color: Color(0xFFD94E61), fontSize: 12),
+          );
+        }
+        if (!snapshot.hasData) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const SizedBox(
+              height: 24,
+              width: 24,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            );
+          }
+          return const SizedBox.shrink();
+        }
+        final receipt = snapshot.data;
+        if (receipt == null) {
+          return const Text(
+            'El comprobante ya no está disponible.',
+            style: TextStyle(color: Color(0xFFD94E61), fontSize: 12),
+          );
+        }
+
+        Uint8List imageBytes;
+        try {
+          imageBytes = base64Decode(receipt.imageBase64);
+        } on FormatException catch (error) {
+          debugPrint(
+            'El comprobante de liquidación ${widget.settlementId} no es Base64 válido: $error',
+          );
+          return const Text(
+            'El comprobante guardado no se puede mostrar.',
+            style: TextStyle(color: Color(0xFFD94E61), fontSize: 12),
+          );
+        }
+
+        return OutlinedButton.icon(
+          onPressed: () => _openReceipt(context, imageBytes),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: const Color(0xFF087F8C),
+            side: const BorderSide(color: Color(0xFFB7DCE8)),
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(13),
+            ),
+          ),
+          icon: const Icon(Icons.image_search_rounded, size: 18),
+          label: const Text('Ver comprobante'),
+        );
+      },
+    );
+  }
+
+  void _openReceipt(BuildContext context, Uint8List bytes) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => Dialog.fullscreen(
+        backgroundColor: Colors.black,
+        child: Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            backgroundColor: Colors.black,
+            foregroundColor: Colors.white,
+            title: const Text('Comprobante de pago'),
+            leading: IconButton(
+              tooltip: 'Cerrar',
+              onPressed: () => Navigator.of(context).pop(),
+              icon: const Icon(Icons.close_rounded),
+            ),
+          ),
+          body: SafeArea(
+            child: Center(
+              child: InteractiveViewer(
+                minScale: 0.8,
+                maxScale: 5,
+                child: Image.memory(bytes, fit: BoxFit.contain),
+              ),
+            ),
+          ),
         ),
       ),
     );

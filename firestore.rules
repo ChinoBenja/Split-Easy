@@ -122,10 +122,81 @@ service cloud.firestore {
     }
 
     match /groups/{groupId}/history/{historyId} {
-      allow get, list: if isSignedIn();
-      allow create: if isSignedIn();
+      allow get, list: if isGroupMember(groupId);
+      allow create: if isGroupMember(groupId);
       allow update: if false;
-      allow delete: if isSignedIn();
+      allow delete: if isGroupMember(groupId);
+    }
+
+    match /groups/{groupId}/settlements/{settlementId} {
+      allow get, list: if isGroupMember(groupId);
+      allow create: if isGroupMember(groupId)
+        && request.resource.data.keys().hasAll([
+          'fromUid', 'fromName', 'toUid', 'toName', 'amount',
+          'createdBy', 'createdByName', 'createdAt', 'hasReceipt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'fromUid', 'fromName', 'toUid', 'toName', 'amount',
+          'createdBy', 'createdByName', 'createdAt', 'note', 'hasReceipt'
+        ])
+        && request.resource.data.fromUid is string
+        && request.resource.data.toUid is string
+        && request.resource.data.fromName is string
+        && request.resource.data.toName is string
+        && request.resource.data.fromUid != request.resource.data.toUid
+        && request.resource.data.fromUid in get(
+          /databases/$(database)/documents/groups/$(groupId)
+        ).data.memberIds
+        && request.resource.data.toUid in get(
+          /databases/$(database)/documents/groups/$(groupId)
+        ).data.memberIds
+        && request.resource.data.amount is number
+        && request.resource.data.amount > 0
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdByName is string
+        && request.resource.data.hasReceipt is bool
+        && request.resource.data.createdAt is timestamp
+        && (
+          !request.resource.data.keys().hasAny(['note'])
+          || (
+            request.resource.data.note is string
+            && request.resource.data.note.size() <= 500
+          )
+        );
+      allow update: if false;
+      allow delete: if canDeleteGroupData(groupId);
+    }
+
+    match /groups/{groupId}/settlement_receipts/{settlementId} {
+      function hasValidImageData() {
+        return request.resource.data.imageBase64 is string
+          && request.resource.data.imageBase64.size() <= 716800
+          && request.resource.data.imageContentType is string
+          && request.resource.data.imageContentType.matches('image/.*');
+      }
+
+      allow get, list: if isGroupMember(groupId);
+      allow create: if isGroupMember(groupId)
+        && request.resource.data.keys().hasAll([
+          'settlementId', 'imageBase64', 'imageContentType',
+          'createdBy', 'createdAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'settlementId', 'imageBase64', 'imageContentType',
+          'createdBy', 'createdAt'
+        ])
+        && request.resource.data.settlementId == settlementId
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt is timestamp
+        && existsAfter(
+          /databases/$(database)/documents/groups/$(groupId)/settlements/$(settlementId)
+        )
+        && getAfter(
+          /databases/$(database)/documents/groups/$(groupId)/settlements/$(settlementId)
+        ).data.hasReceipt == true
+        && hasValidImageData();
+      allow update: if false;
+      allow delete: if canDeleteGroupData(groupId);
     }
   }
 }
