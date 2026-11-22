@@ -43,8 +43,9 @@ class _GroupsListScreenState extends State<GroupsListScreen> {
     await Navigator.of(
       context,
     ).push(MaterialPageRoute<void>(builder: (_) => const ProfileScreen()));
+    if (!mounted) return;
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null || !mounted) return;
+    if (uid == null) return;
     setState(() {
       _photoUid = null;
       _userPhotoFuture = null;
@@ -1103,6 +1104,7 @@ class _PendingInvitationsSectionState
     extends State<_PendingInvitationsSection> {
   final _firestoreService = FirestoreService();
   final Set<String> _respondingGroupIds = {};
+  final Map<String, Future<String>> _inviterNameFutures = {};
   late Stream<List<GroupModel>> _invitationsStream;
 
   @override
@@ -1119,6 +1121,33 @@ class _PendingInvitationsSectionState
         widget.uid,
       );
     }
+  }
+
+  Future<String> _inviterNameFor(GroupModel group) {
+    final storedName = group.memberNames[group.createdBy]?.trim();
+    if (storedName != null && storedName.isNotEmpty) {
+      return Future.value(storedName);
+    }
+
+    return _inviterNameFutures.putIfAbsent(group.createdBy, () async {
+      if (group.createdBy.isEmpty) return 'un integrante del grupo';
+      try {
+        final profiles = await _firestoreService.getUserProfiles([
+          group.createdBy,
+        ]);
+        final profile = profiles[group.createdBy];
+        final name = profile?.name.trim();
+        if (name != null && name.isNotEmpty) return name;
+        final email = profile?.email.trim();
+        if (email != null && email.isNotEmpty) return email;
+      } catch (error, stackTrace) {
+        debugPrint(
+          'No se pudo cargar el perfil del creador ${group.createdBy}: $error',
+        );
+        debugPrintStack(stackTrace: stackTrace);
+      }
+      return 'un integrante del grupo';
+    });
   }
 
   Future<void> _respond(GroupModel group, {required bool accept}) async {
@@ -1223,6 +1252,35 @@ class _PendingInvitationsSectionState
                           ),
                         ),
                       ],
+                      const SizedBox(height: 10),
+                      FutureBuilder<String>(
+                        future: _inviterNameFor(group),
+                        builder: (context, snapshot) {
+                          final inviterName =
+                              snapshot.data ?? 'un integrante del grupo';
+                          return Row(
+                            children: [
+                              Icon(
+                                Icons.person_outline_rounded,
+                                size: 18,
+                                color: colors.onSecondaryContainer.withValues(
+                                  alpha: 0.8,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'Invitación enviada por $inviterName',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colors.onSecondaryContainer,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
                       const SizedBox(height: 12),
                       if (isResponding)
                         const LinearProgressIndicator()

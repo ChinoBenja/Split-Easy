@@ -1,7 +1,9 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../models/category_model.dart';
 import '../../models/expense_model.dart';
+import '../../models/expense_proposal_model.dart';
 import '../../models/group_model.dart';
 import '../../services/firestore_service.dart';
 import 'chat_screen.dart';
@@ -177,19 +179,10 @@ class ExpenseDetailScreen extends StatelessWidget {
                     label: const Text('Ver conversación del grupo'),
                   ),
                   const SizedBox(height: 16),
-                  FilledButton.icon(
-                    onPressed: () =>
-                        _confirmDelete(context, firestoreService, current),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: colors.primary,
-                      foregroundColor: colors.onPrimary,
-                      minimumSize: const Size.fromHeight(52),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                    ),
-                    icon: const Icon(Icons.delete_outline),
-                    label: const Text('Eliminar gasto'),
+                  _ExpenseDeletionSection(
+                    group: group,
+                    expense: current,
+                    service: firestoreService,
                   ),
                 ],
               ),
@@ -203,19 +196,62 @@ class ExpenseDetailScreen extends StatelessWidget {
   void _navigate(BuildContext context, Widget screen) {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
   }
+}
 
-  Future<void> _confirmDelete(
-    BuildContext context,
-    FirestoreService service,
-    ExpenseModel current,
-  ) async {
+class _ExpenseDeletionSection extends StatefulWidget {
+  const _ExpenseDeletionSection({
+    required this.group,
+    required this.expense,
+    required this.service,
+  });
+
+  final GroupModel group;
+  final ExpenseModel expense;
+  final FirestoreService service;
+
+  @override
+  State<_ExpenseDeletionSection> createState() =>
+      _ExpenseDeletionSectionState();
+}
+
+class _ExpenseDeletionSectionState extends State<_ExpenseDeletionSection> {
+  late Stream<List<ExpenseProposal>> _proposalsStream;
+  bool _isSubmitting = false;
+  final Set<String> _handledApprovedProposals = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _proposalsStream = widget.service.watchProposals(
+      widget.group.id,
+      widget.expense.id,
+    );
+  }
+
+  Future<void> _deleteOrPropose(List<ExpenseProposal> proposals) async {
+    if (_isSubmitting) return;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      _showMessage('Inicia sesión para eliminar este gasto.');
+      return;
+    }
+
+    final hasPendingProposal = proposals.any(
+      (proposal) => proposal.type == 'delete' && proposal.status == 'pending',
+    );
+    if (hasPendingProposal) {
+      _showMessage('Ya hay una propuesta de eliminación pendiente.');
+      return;
+    }
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        icon: const Icon(Icons.delete_outline_rounded),
-        title: const Text('Eliminar gasto'),
+        icon: const Icon(Icons.how_to_vote_outlined),
+        title: const Text('Proponer eliminación'),
         content: Text(
-          '¿Eliminar "${current.description}"? Esta acción no se puede deshacer.',
+          'Se enviará una propuesta para eliminar "${widget.expense.description}". '
+          'El gasto se eliminará solo si todos los integrantes aceptan.',
         ),
         actions: [
           TextButton(
@@ -224,23 +260,275 @@ class ExpenseDetailScreen extends StatelessWidget {
           ),
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Eliminar'),
+            child: const Text('Enviar propuesta'),
           ),
         ],
       ),
     );
-    if (confirmed != true || !context.mounted) return;
+    if (confirmed != true || !mounted) return;
 
+    setState(() => _isSubmitting = true);
+    final performedByName =
+        widget.group.memberNames[user.uid] ??
+        user.displayName ??
+        user.email ??
+        'Usuario';
     try {
-      await service.deleteExpense(group.id, current.id);
-      if (context.mounted) Navigator.of(context).pop();
+      await widget.service.proposeExpenseDeletion(
+        groupId: widget.group.id,
+        expenseId: widget.expense.id,
+        proposedBy: user.uid,
+        proposedByName: performedByName,
+        expenseSnapshot: widget.expense.toMap(),
+      );
+      if (!mounted) return;
+      _showMessage('Propuesta enviada a todos los integrantes del grupo.');
     } catch (error) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('No se pudo eliminar el gasto: $error')),
+      _showMessage('No se pudo procesar la eliminación: $error');
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  Future<void> _respond(ExpenseProposal proposal, String response) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || _isSubmitting) return;
+
+    setState(() => _isSubmitting = true);
+    try {
+      final status = await widget.service.respondToProposal(
+        groupId: widget.group.id,
+        expenseId: widget.expense.id,
+        proposalId: proposal.id,
+        uid: user.uid,
+        response: response,
+        groupMemberIds: widget.group.memberIds,
+      );
+      if (!mounted) return;
+
+      if (status == 'approved') {
+        _showMessage('Todos aceptaron. El gasto fue eliminado.');
+        Navigator.of(context).pop();
+      } else if (status == 'rejected') {
+        _showMessage('La propuesta de eliminación fue rechazada.');
+      } else {
+        _showMessage(
+          response == 'accepted'
+              ? 'Registramos tu aceptación.'
+              : 'Registramos tu rechazo.',
         );
       }
+    } catch (error) {
+      _showMessage('No se pudo registrar tu respuesta: $error');
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
     }
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  String _memberName(String uid) =>
+      widget.group.memberNames[uid] ?? 'Integrante';
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return StreamBuilder<List<ExpenseProposal>>(
+      stream: _proposalsStream,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'No se pudieron cargar las propuestas: ${snapshot.error}',
+                style: TextStyle(color: colors.error),
+              ),
+              const SizedBox(height: 12),
+              _deleteButton(const [], canDelete: false),
+            ],
+          );
+        }
+
+        final deletionProposals = (snapshot.data ?? const <ExpenseProposal>[])
+            .where((proposal) => proposal.type == 'delete')
+            .toList();
+        final activeProposal = deletionProposals
+            .cast<ExpenseProposal?>()
+            .firstWhere(
+              (proposal) => proposal?.status == 'pending',
+              orElse: () => null,
+            );
+
+        for (final proposal in deletionProposals) {
+          if (proposal.status == 'approved' &&
+              _handledApprovedProposals.add(proposal.id)) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted && Navigator.of(context).canPop()) {
+                Navigator.of(context).pop();
+              }
+            });
+          }
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final proposal in deletionProposals)
+              _proposalCard(proposal, colors),
+            _deleteButton(deletionProposals, activeProposal: activeProposal),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _deleteButton(
+    List<ExpenseProposal> proposals, {
+    ExpenseProposal? activeProposal,
+    bool canDelete = true,
+  }) {
+    return FilledButton.icon(
+      onPressed: _isSubmitting || activeProposal != null || !canDelete
+          ? null
+          : () => _deleteOrPropose(proposals),
+      style: FilledButton.styleFrom(
+        minimumSize: const Size.fromHeight(52),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      ),
+      icon: _isSubmitting
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.how_to_vote_outlined),
+      label: Text(
+        activeProposal != null
+            ? 'Esperando respuestas'
+            : 'Proponer eliminación',
+      ),
+    );
+  }
+
+  Widget _proposalCard(ExpenseProposal proposal, ColorScheme colors) {
+    final accepted = widget.group.memberIds
+        .where((uid) => proposal.responses[uid] == 'accepted')
+        .map(_memberName)
+        .toList();
+    final rejected = widget.group.memberIds
+        .where((uid) => proposal.responses[uid] == 'rejected')
+        .map(_memberName)
+        .toList();
+    final pending = proposal.status == 'pending'
+        ? proposal.pendingMembers(widget.group.memberIds)
+        : const <String>[];
+    final currentUid = FirebaseAuth.instance.currentUser?.uid;
+    final canRespond =
+        proposal.status == 'pending' &&
+        currentUid != null &&
+        !proposal.hasResponded(currentUid);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 14),
+      color: colors.errorContainer.withValues(alpha: 0.45),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.how_to_vote_outlined, color: colors.error),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${proposal.proposedByName} propuso eliminar este gasto',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            if (accepted.isNotEmpty)
+              _responseLine(
+                Icons.check_circle_outline_rounded,
+                'Aceptado por ${accepted.join(', ')}',
+                colors.primary,
+              ),
+            if (rejected.isNotEmpty)
+              _responseLine(
+                Icons.cancel_outlined,
+                'Rechazado por ${rejected.join(', ')}',
+                colors.error,
+              ),
+            if (pending.isNotEmpty)
+              _responseLine(
+                Icons.schedule_rounded,
+                'Pendiente de ${pending.map(_memberName).join(', ')}',
+                colors.onSurfaceVariant,
+              ),
+            if (proposal.status == 'approved')
+              _responseLine(
+                Icons.check_circle_rounded,
+                'Todos aceptaron; el gasto fue eliminado.',
+                colors.primary,
+              ),
+            if (proposal.status == 'rejected' && rejected.isEmpty)
+              _responseLine(
+                Icons.cancel_rounded,
+                'La propuesta fue rechazada.',
+                colors.error,
+              ),
+            if (canRespond) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _isSubmitting
+                          ? null
+                          : () => _respond(proposal, 'rejected'),
+                      child: const Text('Rechazar'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: _isSubmitting
+                          ? null
+                          : () => _respond(proposal, 'accepted'),
+                      child: const Text('Aceptar eliminación'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _responseLine(IconData icon, String text, Color color) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 17, color: color),
+          const SizedBox(width: 7),
+          Expanded(child: Text(text)),
+        ],
+      ),
+    );
   }
 }
 

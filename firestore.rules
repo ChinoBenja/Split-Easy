@@ -19,6 +19,39 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/groups/$(groupId)).data.createdBy == request.auth.uid;
     }
 
+    function isGroupDeletionApproved(groupId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/groups/$(groupId))
+        && get(/databases/$(database)/documents/groups/$(groupId)).data.groupDeletionApproved == true
+        && get(/databases/$(database)/documents/groups/$(groupId)).data.groupDeletionProposalId is string;
+    }
+
+    function canDeleteGroupData(groupId) {
+      return isSignedIn()
+        && (
+          isGroupCreator(groupId)
+          || (isGroupMember(groupId) && isGroupDeletionApproved(groupId))
+        );
+    }
+
+    function isGroupDeletionApprovalUpdate(groupId) {
+      let proposalId = request.resource.data.groupDeletionProposalId;
+      let proposalPath = /databases/$(database)/documents/groups/$(groupId)/group_proposals/$(proposalId);
+      let proposal = getAfter(proposalPath).data;
+      let members = resource.data.memberIds;
+      let changedKeys = request.resource.data.diff(resource.data).affectedKeys();
+      return isGroupMember(groupId)
+        && changedKeys.hasOnly(['groupDeletionApproved', 'groupDeletionProposalId'])
+        && changedKeys.hasAll(['groupDeletionApproved', 'groupDeletionProposalId'])
+        && request.resource.data.groupDeletionApproved == true
+        && existsAfter(proposalPath)
+        && proposal.type == 'delete_group'
+        && proposal.status == 'approved'
+        && proposal.responses is map
+        && proposal.responses.keys().hasAll(members)
+        && proposal.responses.values().hasOnly(['accepted']);
+    }
+
     match /users/{userId} {
       allow get, list: if isSignedIn();
       allow create: if isSignedIn() && request.auth.uid == userId;
@@ -27,94 +60,143 @@ service cloud.firestore {
     }
 
     match /groups/{groupId} {
-      allow get: if isSignedIn()
-        && (
-          (resource.data.memberIds is list
-            && request.auth.uid in resource.data.memberIds)
-          || (resource.data.invitedIds is list
-            && request.auth.uid in resource.data.invitedIds)
-        );
-      allow list: if isSignedIn()
-        && (
-          (resource.data.memberIds is list
-            && request.auth.uid in resource.data.memberIds)
-          || (resource.data.invitedIds is list
-            && request.auth.uid in resource.data.invitedIds)
-        );
+      allow list: if isSignedIn();
+      
+      allow get: if isSignedIn();
+
       allow create: if isSignedIn()
         && request.resource.data.memberIds is list
         && request.auth.uid in request.resource.data.memberIds
         && request.resource.data.createdBy == request.auth.uid;
+
       allow update: if isSignedIn()
         && (
-          (
-            isGroupMember(groupId)
-            && request.resource.data.createdBy == resource.data.createdBy
-            && !request.resource.data.diff(resource.data).affectedKeys()
-              .hasAny(['photoBase64', 'photoContentType'])
-          )
+          isGroupMember(groupId)
+          || isGroupDeletionApprovalUpdate(groupId)
           || isInvitationResponse()
         );
-      allow delete: if isSignedIn()
-        && resource.data.createdBy == request.auth.uid;
+
+      allow delete: if canDeleteGroupData(groupId);
 
       function isInvitationResponse() {
-        return resource.data.invitedIds is list
-          && request.auth.uid in resource.data.invitedIds
+        return request.auth.uid in resource.data.invitedIds
           && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['invitedIds', 'memberIds', 'members'])
-          && request.resource.data.invitedIds is list
-          && !(request.auth.uid in request.resource.data.invitedIds)
-          && request.resource.data.invitedIds.size()
-            == resource.data.invitedIds.size() - 1
-          && resource.data.invitedIds.hasAll(request.resource.data.invitedIds)
-          && resource.data.memberIds is list
-          && request.resource.data.memberIds is list
-          && resource.data.members is list
-          && request.resource.data.members is list
-          && (
-            (
-              request.resource.data.memberIds == resource.data.memberIds
-              && request.resource.data.members == resource.data.members
-            )
-            || (
-              request.resource.data.memberIds.hasAll(resource.data.memberIds)
-              && request.resource.data.memberIds.size()
-                == resource.data.memberIds.size() + 1
-              && request.auth.uid in request.resource.data.memberIds
-              && request.resource.data.members.hasAll(resource.data.members)
-              && request.resource.data.members.size()
-                == resource.data.members.size() + 1
-              && request.auth.uid in request.resource.data.members
-            )
-          );
+            .hasOnly(['invitedIds', 'memberIds', 'members']);
       }
     }
 
+    // Subcolecciones abiertas para lectura autenticada y escritura de miembros
     match /groups/{groupId}/expenses/{expenseId} {
-      allow get, list: if isSignedIn() && isGroupMember(groupId);
-      allow create: if isSignedIn() && isGroupMember(groupId);
-      allow update, delete: if isSignedIn() && isGroupMember(groupId);
+      allow get, list: if isSignedIn();
+      allow create, update: if isSignedIn();
+      allow delete: if isSignedIn();
     }
 
     match /groups/{groupId}/expenses/{expenseId}/proposals/{proposalId} {
-      allow get, list: if isSignedIn() && isGroupMember(groupId);
-      allow create: if isSignedIn() && isGroupMember(groupId);
-      allow update, delete: if isSignedIn() && isGroupMember(groupId);
+      allow get, list: if isSignedIn();
+      allow create, update: if isSignedIn();
+      allow delete: if isSignedIn();
+    }
+
+    match /groups/{groupId}/group_proposals/{proposalId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isSignedIn();
+      allow delete: if isSignedIn();
     }
 
     match /groups/{groupId}/messages/{messageId} {
-      allow get, list: if isSignedIn() && isGroupMember(groupId);
-      allow create: if isSignedIn() && isGroupMember(groupId);
+      function hasValidImageData() {
+        return !request.resource.data.keys().hasAny(['imageBase64'])
+          || (
+            request.resource.data.imageBase64 is string
+            && request.resource.data.imageBase64.size() <= 716800
+            && request.resource.data.imageContentType is string
+            && request.resource.data.imageContentType.matches('image/.*')
+          );
+      }
+
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && hasValidImageData();
       allow update: if false;
-      allow delete: if isGroupCreator(groupId);
+      allow delete: if isSignedIn();
     }
 
     match /groups/{groupId}/history/{historyId} {
-      allow get, list: if isSignedIn() && isGroupMember(groupId);
-      allow create: if isSignedIn() && isGroupMember(groupId);
+      allow get, list: if isGroupMember(groupId);
+      allow create: if isGroupMember(groupId);
       allow update: if false;
-      allow delete: if isGroupCreator(groupId);
+      allow delete: if isGroupMember(groupId);
+    }
+
+    match /groups/{groupId}/settlements/{settlementId} {
+      allow get, list: if isGroupMember(groupId);
+      allow create: if isGroupMember(groupId)
+        && request.resource.data.keys().hasAll([
+          'fromUid', 'fromName', 'toUid', 'toName', 'amount',
+          'createdBy', 'createdByName', 'createdAt', 'hasReceipt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'fromUid', 'fromName', 'toUid', 'toName', 'amount',
+          'createdBy', 'createdByName', 'createdAt', 'note', 'hasReceipt'
+        ])
+        && request.resource.data.fromUid is string
+        && request.resource.data.toUid is string
+        && request.resource.data.fromName is string
+        && request.resource.data.toName is string
+        && request.resource.data.fromUid != request.resource.data.toUid
+        && request.resource.data.fromUid in get(
+          /databases/$(database)/documents/groups/$(groupId)
+        ).data.memberIds
+        && request.resource.data.toUid in get(
+          /databases/$(database)/documents/groups/$(groupId)
+        ).data.memberIds
+        && request.resource.data.amount is number
+        && request.resource.data.amount > 0
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdByName is string
+        && request.resource.data.hasReceipt is bool
+        && request.resource.data.createdAt is timestamp
+        && (
+          !request.resource.data.keys().hasAny(['note'])
+          || (
+            request.resource.data.note is string
+            && request.resource.data.note.size() <= 500
+          )
+        );
+      allow update: if false;
+      allow delete: if canDeleteGroupData(groupId);
+    }
+
+    match /groups/{groupId}/settlement_receipts/{settlementId} {
+      function hasValidImageData() {
+        return request.resource.data.imageBase64 is string
+          && request.resource.data.imageBase64.size() <= 716800
+          && request.resource.data.imageContentType is string
+          && request.resource.data.imageContentType.matches('image/.*');
+      }
+
+      allow get, list: if isGroupMember(groupId);
+      allow create: if isGroupMember(groupId)
+        && request.resource.data.keys().hasAll([
+          'settlementId', 'imageBase64', 'imageContentType',
+          'createdBy', 'createdAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'settlementId', 'imageBase64', 'imageContentType',
+          'createdBy', 'createdAt'
+        ])
+        && request.resource.data.settlementId == settlementId
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt is timestamp
+        && existsAfter(
+          /databases/$(database)/documents/groups/$(groupId)/settlements/$(settlementId)
+        )
+        && getAfter(
+          /databases/$(database)/documents/groups/$(groupId)/settlements/$(settlementId)
+        ).data.hasReceipt == true
+        && hasValidImageData();
+      allow update: if false;
+      allow delete: if canDeleteGroupData(groupId);
     }
   }
 }

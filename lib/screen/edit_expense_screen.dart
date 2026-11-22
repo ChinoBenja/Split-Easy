@@ -56,9 +56,8 @@ class _EditExpenseScreenState extends State<EditExpenseScreen> {
       firstDate: DateTime(2020),
       lastDate: DateTime.now().add(const Duration(days: 1)),
     );
-    if (picked != null && mounted) {
-      setState(() => _selectedDate = picked);
-    }
+    if (!mounted || picked == null) return;
+    setState(() => _selectedDate = picked);
   }
 
   Future<void> _submitProposal() async {
@@ -126,14 +125,13 @@ class _EditExpenseScreenState extends State<EditExpenseScreen> {
         oldValues: oldValues,
         newValues: newValues,
       );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Propuesta enviada al chat para su aprobación.'),
-          ),
-        );
-        Navigator.of(context).pop();
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Propuesta enviada al chat para su aprobación.'),
+        ),
+      );
+      Navigator.of(context).pop();
     } catch (error) {
       if (mounted) {
         setState(

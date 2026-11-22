@@ -77,7 +77,8 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
       setState(
         () => _messages.add(
           const _ChatMessage(
-            text: 'No pude conectar con el asistente. Revisa tu conexión e '
+            text:
+                'No pude conectar con el asistente. Revisa tu conexión e '
                 'inténtalo nuevamente.',
             isUser: false,
           ),

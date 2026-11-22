@@ -40,6 +40,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
   final _dateFormat = DateFormat('dd MMM yyyy', 'es');
 
   bool _isDeletingGroup = false;
+  int? _unreadCountOverride;
   Future<String?>? _userPhotoFuture;
 
   @override
@@ -61,16 +62,20 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     final colors = theme.colorScheme;
     final currentUserId = FirebaseAuth.instance.currentUser?.uid.trim();
     final creatorId = widget.group.createdBy.trim();
+    final isGroupMember = widget.group.memberIds.contains(currentUserId);
     final canDeleteGroup =
         currentUserId != null &&
         currentUserId.isNotEmpty &&
-        creatorId.isNotEmpty &&
-        creatorId == currentUserId;
+        ((widget.group.memberIds.length > 1 && isGroupMember) ||
+            (creatorId.isNotEmpty && creatorId == currentUserId));
 
     return Scaffold(
-      backgroundColor: colors.surface,
+      backgroundColor: const Color(0xFFEAF4FB),
       appBar: AppBar(
-        backgroundColor: colors.surface,
+        backgroundColor: const Color(0xFFEAF4FB),
+        foregroundColor: const Color(0xFF173B75),
+        elevation: 0,
+        scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
         title: Tooltip(
           message: 'Ver integrantes del grupo',
@@ -84,21 +89,21 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                 children: [
                   CircleAvatar(
                     radius: 17,
-                    backgroundColor: colors.primaryContainer,
+                    backgroundColor: const Color(0xFFE7F3F8),
                     child: widget.group.photoSource == null
-                        ? Icon(
+                        ? const Icon(
                             Icons.groups_rounded,
                             size: 19,
-                            color: colors.onPrimaryContainer,
+                            color: Color(0xFF087F8C),
                           )
                         : ClipOval(
                             child: SizedBox.expand(
                               child: ProfilePhotoImage(
                                 source: widget.group.photoSource!,
-                                fallback: Icon(
+                                fallback: const Icon(
                                   Icons.groups_rounded,
                                   size: 19,
-                                  color: colors.onPrimaryContainer,
+                                  color: Color(0xFF087F8C),
                                 ),
                               ),
                             ),
@@ -111,11 +116,16 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.titleLarge?.copyWith(
+                        color: const Color(0xFF173B75),
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
-                  const Icon(Icons.expand_more_rounded, size: 20),
+                  const Icon(
+                    Icons.expand_more_rounded,
+                    size: 20,
+                    color: Color(0xFF087F8C),
+                  ),
                 ],
               ),
             ),
@@ -190,11 +200,12 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 920),
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(24, 16, 24, 112),
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 112),
                 children: [
                   Text(
                     'Resumen financiero',
                     style: theme.textTheme.headlineSmall?.copyWith(
+                      color: const Color(0xFF173B75),
                       fontWeight: FontWeight.w700,
                       letterSpacing: -0.4,
                     ),
@@ -203,7 +214,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                   Text(
                     'Consulta los gastos y tu situación en este grupo.',
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      color: colors.onSurfaceVariant,
+                      color: const Color(0xFF687C8D),
                     ),
                   ),
                   const SizedBox(height: 18),
@@ -214,22 +225,35 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                     currencyFormat: _currencyFormat,
                     onDebtTap: () => _showDebtDetails(settlements, userId),
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 24),
                   Row(
                     children: [
                       Expanded(
                         child: Text(
                           'Gastos del grupo',
                           style: theme.textTheme.titleLarge?.copyWith(
+                            color: const Color(0xFF173B75),
                             fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
                       if (expenses.isNotEmpty)
-                        Text(
-                          '${expenses.length} ${expenses.length == 1 ? 'movimiento' : 'movimientos'}',
-                          style: theme.textTheme.labelLarge?.copyWith(
-                            color: colors.onSurfaceVariant,
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 11,
+                            vertical: 7,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: const Color(0xFFDCE8EF)),
+                          ),
+                          child: Text(
+                            '${expenses.length} ${expenses.length == 1 ? 'movimiento' : 'movimientos'}',
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              color: const Color(0xFF526879),
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                     ],
@@ -271,9 +295,57 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
             tooltip: 'Chat del grupo',
             backgroundColor: const Color(0xFF55D4F0),
             foregroundColor: const Color(0xFF12345B),
-            onPressed: () =>
-                _navigateTo(context, ChatScreen(group: widget.group)),
-            child: const Icon(Icons.chat_bubble_rounded),
+            onPressed: _openGroupChat,
+            child: currentUserId == null
+                ? const Icon(Icons.chat_bubble_rounded)
+                : StreamBuilder<int>(
+                    stream: _firestoreService.watchUnreadMessageCount(
+                      groupId: widget.group.id,
+                      uid: currentUserId,
+                    ),
+                    builder: (context, snapshot) {
+                      final unreadCount =
+                          _unreadCountOverride ?? snapshot.data ?? 0;
+                      return Tooltip(
+                        message: snapshot.hasError
+                            ? 'No se pudo cargar el contador de mensajes'
+                            : '$unreadCount mensajes sin leer',
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            const Icon(Icons.chat_bubble_rounded),
+                            if (unreadCount > 0)
+                              Positioned(
+                                right: -10,
+                                top: -10,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 5,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: colors.error,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  constraints: const BoxConstraints(
+                                    minWidth: 18,
+                                    minHeight: 18,
+                                  ),
+                                  child: Text(
+                                    unreadCount > 99 ? '99+' : '$unreadCount',
+                                    textAlign: TextAlign.center,
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: colors.onError,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
           ),
           const SizedBox(height: 12),
           FloatingActionButton.small(
@@ -323,10 +395,9 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: const Color(0xFFEAF4FB),
       builder: (context) {
         final theme = Theme.of(context);
-        final colors = theme.colorScheme;
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
@@ -337,6 +408,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                 Text(
                   'Tus deudas',
                   style: theme.textTheme.headlineSmall?.copyWith(
+                    color: const Color(0xFF173B75),
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -344,7 +416,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                 Text(
                   'A quién debes y cuánto en ${widget.group.name}.',
                   style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colors.onSurfaceVariant,
+                    color: const Color(0xFF687C8D),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -353,8 +425,9 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                     width: double.infinity,
                     padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(
-                      color: colors.primaryContainer.withValues(alpha: 0.55),
+                      color: Colors.white,
                       borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: const Color(0xFFDCE8EF)),
                     ),
                     child: const Text(
                       'No tienes deudas pendientes en este grupo.',
@@ -365,16 +438,13 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                     (debt) => Container(
                       margin: const EdgeInsets.only(bottom: 10),
                       decoration: BoxDecoration(
-                        color: colors.surfaceContainerHighest.withValues(
-                          alpha: 0.7,
-                        ),
+                        color: Colors.white,
                         borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: const Color(0xFFDCE8EF)),
                       ),
                       child: ListTile(
                         leading: CircleAvatar(
-                          backgroundColor: const Color(
-                            0xFF49C7E8,
-                          ).withValues(alpha: 0.18),
+                          backgroundColor: const Color(0xFFE7F3F8),
                           child: const Icon(
                             Icons.person_rounded,
                             color: Color(0xFF087F8C),
@@ -386,7 +456,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                           _currencyFormat.format(debt.amount),
                           style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w800,
-                            color: colors.primary,
+                            color: const Color(0xFF087F8C),
                           ),
                         ),
                       ),
@@ -404,6 +474,15 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
   }
 
+  Future<void> _openGroupChat() async {
+    setState(() => _unreadCountOverride = 0);
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => ChatScreen(group: widget.group)),
+    );
+    if (!mounted) return;
+    setState(() => _unreadCountOverride = null);
+  }
+
   void _handleGroupAction(GroupOptionsAction action) {
     switch (action) {
       case GroupOptionsAction.members:
@@ -413,7 +492,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
       case GroupOptionsAction.history:
         _navigateTo(context, HistoryScreen(group: widget.group));
       case GroupOptionsAction.chat:
-        _navigateTo(context, ChatScreen(group: widget.group));
+        _openGroupChat();
       case GroupOptionsAction.balance:
         _navigateTo(context, BalanceScreen(group: widget.group));
       case GroupOptionsAction.analytics:
@@ -499,13 +578,21 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
   }
 
   Future<void> _confirmDeleteGroup() async {
+    final requiresConsensus = widget.group.memberIds.length > 1;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Eliminar grupo'),
-        content: const Text(
-          'Esta acción eliminará permanentemente el grupo, sus gastos, '
-          'propuestas, mensajes e historial. No se puede deshacer.',
+        title: Text(
+          requiresConsensus
+              ? 'Proponer eliminación del grupo'
+              : 'Eliminar grupo',
+        ),
+        content: Text(
+          requiresConsensus
+              ? 'Se enviará una votación al chat grupal. El grupo y todos sus '
+                    'datos se eliminarán solo si todos los integrantes aceptan.'
+              : 'Esta acción eliminará permanentemente el grupo, sus gastos, '
+                    'propuestas, mensajes e historial. No se puede deshacer.',
         ),
         actions: [
           TextButton(
@@ -514,7 +601,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Eliminar'),
+            child: Text(requiresConsensus ? 'Enviar propuesta' : 'Eliminar'),
           ),
         ],
       ),
@@ -534,6 +621,28 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
 
     setState(() => _isDeletingGroup = true);
     try {
+      if (requiresConsensus) {
+        final user = FirebaseAuth.instance.currentUser!;
+        await _firestoreService.proposeGroupDeletion(
+          groupId: widget.group.id,
+          proposedBy: user.uid,
+          proposedByName:
+              widget.group.memberNames[user.uid] ??
+              user.displayName ??
+              user.email ??
+              'Usuario',
+        );
+        if (!mounted) return;
+        final navigator = Navigator.of(context);
+        navigator.pop();
+        navigator.push(
+          MaterialPageRoute<void>(
+            builder: (_) => ChatScreen(group: widget.group),
+          ),
+        );
+        return;
+      }
+
       await _firestoreService.deleteGroup(groupId: widget.group.id);
       if (!mounted) return;
       Navigator.of(context).popUntil((route) => route.isFirst);
@@ -545,21 +654,18 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
       );
       final message = error.code == 'permission-denied'
           ? 'Firestore rechazó la eliminación por permisos. '
-                'Verifica las reglas publicadas y que seas el creador '
+                'Verifica que seas integrante del grupo y que las reglas '
+                'permitan la operación consensuada '
                 '(código: ${error.code}).'
           : 'No se pudo eliminar el grupo '
                 '(código: ${error.code}). ${error.message ?? 'Inténtalo de nuevo.'}';
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
-    } on StateError {
+    } on StateError catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'No se pudo eliminar el grupo. Verifica que seas su creador e inténtalo de nuevo.',
-          ),
-        ),
+        SnackBar(content: Text('No se pudo procesar la eliminación: $error')),
       );
     } finally {
       if (mounted) setState(() => _isDeletingGroup = false);
@@ -604,28 +710,61 @@ class _InviteMemberDialogState extends State<_InviteMemberDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return AlertDialog(
-      title: const Text('Invitar integrante'),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+      titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+      contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
+      actionsPadding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
+      title: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: colors.primaryContainer,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(
+              Icons.person_add_alt_1_rounded,
+              color: colors.onPrimaryContainer,
+            ),
+          ),
+          const SizedBox(width: 14),
+          const Expanded(child: Text('Invitar integrante')),
+        ],
+      ),
       content: TextField(
         controller: _emailController,
         autofocus: true,
         keyboardType: TextInputType.emailAddress,
         textInputAction: TextInputAction.done,
         enabled: !_isSubmitting,
-        decoration: const InputDecoration(
+        decoration: InputDecoration(
           labelText: 'Correo electrónico',
           hintText: 'nombre@ejemplo.com',
-          prefixIcon: Icon(Icons.email_outlined),
+          prefixIcon: const Icon(Icons.alternate_email_rounded),
+          filled: true,
+          fillColor: colors.surfaceContainerLow,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
         ),
         onSubmitted: (_) => _submit(),
       ),
       actions: [
         TextButton(
           onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
+          style: TextButton.styleFrom(
+            minimumSize: const Size(96, 48),
+            foregroundColor: colors.onSurfaceVariant,
+          ),
           child: const Text('Cancelar'),
         ),
         FilledButton(
           onPressed: _isSubmitting ? null : _submit,
+          style: FilledButton.styleFrom(
+            minimumSize: const Size(176, 48),
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+          ),
           child: _isSubmitting
               ? const SizedBox(
                   width: 18,
@@ -657,14 +796,13 @@ class _FinancialSummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colors = theme.colorScheme;
     final isCredit = userBalance > 0.01;
     final isDebt = userBalance < -0.01;
     final balanceColor = isCredit
         ? const Color(0xFFB9F2D0)
         : isDebt
         ? const Color(0xFFFFC6C6)
-        : colors.onPrimary;
+        : Colors.white;
     final balanceTitle = isCredit
         ? 'TE DEBEN'
         : isDebt
@@ -679,9 +817,9 @@ class _FinancialSummaryCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(26),
         boxShadow: [
           BoxShadow(
-            color: colors.primary.withValues(alpha: 0.19),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
+            color: const Color(0xFF12345B).withValues(alpha: 0.2),
+            blurRadius: 22,
+            offset: const Offset(0, 9),
           ),
         ],
       ),
@@ -692,11 +830,8 @@ class _FinancialSummaryCard extends StatelessWidget {
             Positioned.fill(
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      colors.primary,
-                      Color.lerp(colors.primary, colors.secondary, 0.34)!,
-                    ],
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF12345B), Color(0xFF075A78)],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -731,32 +866,59 @@ class _FinancialSummaryCard extends StatelessWidget {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.all(22),
+              padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'GASTO TOTAL DEL GRUPO',
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: colors.onPrimary.withValues(alpha: 0.76),
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1,
-                    ),
+                  Row(
+                    children: [
+                      Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(11),
+                        ),
+                        child: const Icon(
+                          Icons.account_balance_wallet_rounded,
+                          color: Color(0xFFB4F0FF),
+                          size: 19,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'GASTO TOTAL DEL GRUPO',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: Colors.white.withValues(alpha: 0.78),
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.9,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 7),
-                  Text(
-                    currencyFormat.format(totalSpent),
-                    style: theme.textTheme.headlineLarge?.copyWith(
-                      color: colors.onPrimary,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.6,
+                  const SizedBox(height: 8),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      currencyFormat.format(totalSpent),
+                      maxLines: 1,
+                      style: theme.textTheme.headlineLarge?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.6,
+                      ),
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    padding: const EdgeInsets.symmetric(vertical: 15),
                     child: Divider(
                       height: 1,
-                      color: colors.onPrimary.withValues(alpha: 0.2),
+                      color: Colors.white.withValues(alpha: 0.22),
                     ),
                   ),
                   LayoutBuilder(
@@ -764,15 +926,15 @@ class _FinancialSummaryCard extends StatelessWidget {
                       final contributionMetric = _FinancialMetric(
                         title: 'TÚ HAS APORTADO',
                         value: currencyFormat.format(userContribution),
-                        color: colors.onPrimary,
-                        mutedColor: colors.onPrimary.withValues(alpha: 0.74),
+                        color: Colors.white,
+                        mutedColor: Colors.white.withValues(alpha: 0.76),
                         icon: Icons.account_balance_wallet_outlined,
                       );
                       final balanceMetric = _FinancialMetric(
                         title: balanceTitle,
                         value: balanceValue,
                         color: balanceColor,
-                        mutedColor: colors.onPrimary.withValues(alpha: 0.74),
+                        mutedColor: Colors.white.withValues(alpha: 0.76),
                         icon: isDebt
                             ? Icons.south_west_rounded
                             : isCredit
@@ -840,6 +1002,8 @@ class _FinancialMetric extends StatelessWidget {
         children: [
           Text(
             title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: theme.textTheme.labelSmall?.copyWith(
               color: mutedColor,
               fontWeight: FontWeight.w700,
@@ -852,13 +1016,16 @@ class _FinancialMetric extends StatelessWidget {
               Icon(icon, color: color, size: 18),
               const SizedBox(width: 7),
               Flexible(
-                child: Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    color: color,
-                    fontWeight: FontWeight.w700,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    value,
+                    maxLines: 1,
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      color: color,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ),
@@ -874,7 +1041,8 @@ class _FinancialMetric extends StatelessWidget {
                   child: const Text(
                     'Ver deudas',
                     maxLines: 1,
-                    style: TextStyle(fontWeight: FontWeight.w700),
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
                   ),
                 ),
             ],
@@ -906,12 +1074,12 @@ class _ExpenseCard extends StatelessWidget {
 
     return Card(
       margin: EdgeInsets.zero,
-      elevation: 0,
-      shadowColor: colors.primary.withValues(alpha: 0.06),
+      elevation: 1,
+      shadowColor: const Color(0xFF173B75).withValues(alpha: 0.06),
       color: Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: colors.primary.withValues(alpha: 0.09)),
+        side: const BorderSide(color: Color(0xFFDCE8EF)),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -939,6 +1107,7 @@ class _ExpenseCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.titleMedium?.copyWith(
+                        color: const Color(0xFF173B75),
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -948,7 +1117,7 @@ class _ExpenseCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: colors.onSurfaceVariant,
+                        color: const Color(0xFF687C8D),
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -957,13 +1126,13 @@ class _ExpenseCard extends StatelessWidget {
                         Icon(
                           Icons.calendar_today_outlined,
                           size: 12,
-                          color: colors.onSurfaceVariant,
+                          color: const Color(0xFF8093A1),
                         ),
                         const SizedBox(width: 5),
                         Text(
                           formattedDate,
                           style: theme.textTheme.labelSmall?.copyWith(
-                            color: colors.onSurfaceVariant,
+                            color: const Color(0xFF8093A1),
                           ),
                         ),
                       ],
@@ -971,16 +1140,23 @@ class _ExpenseCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
-                    currencyFormat.format(expense.amount),
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: colors.primary,
-                      fontWeight: FontWeight.w700,
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 110),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        currencyFormat.format(expense.amount),
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: const Color(0xFF2457C5),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -992,7 +1168,7 @@ class _ExpenseCard extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: isSettled
                           ? const Color(0xFF19734A).withValues(alpha: 0.1)
-                          : colors.secondaryContainer,
+                          : const Color(0xFFD9EDF4),
                       borderRadius: BorderRadius.circular(24),
                     ),
                     child: Text(
@@ -1002,7 +1178,7 @@ class _ExpenseCard extends StatelessWidget {
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: isSettled
                             ? const Color(0xFF19734A)
-                            : colors.onSecondaryContainer,
+                            : const Color(0xFF176B87),
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -1023,15 +1199,16 @@ class _EmptyExpensesState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colors = theme.colorScheme;
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(24, 32, 24, 34),
       decoration: BoxDecoration(
-        color: colors.surfaceContainerLow,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: colors.outlineVariant.withValues(alpha: 0.6)),
+        border: const Border.fromBorderSide(
+          BorderSide(color: Color(0xFFDCE8EF)),
+        ),
       ),
       child: Column(
         children: [
@@ -1039,13 +1216,13 @@ class _EmptyExpensesState extends StatelessWidget {
             width: 92,
             height: 92,
             decoration: BoxDecoration(
-              color: colors.primaryContainer,
+              color: const Color(0xFFE7F3F8),
               shape: BoxShape.circle,
             ),
             child: Icon(
               Icons.receipt_long_rounded,
               size: 44,
-              color: colors.onPrimaryContainer,
+              color: const Color(0xFF087F8C),
             ),
           ),
           const SizedBox(height: 18),
@@ -1053,6 +1230,7 @@ class _EmptyExpensesState extends StatelessWidget {
             'Aún no hay gastos registrados',
             textAlign: TextAlign.center,
             style: theme.textTheme.titleLarge?.copyWith(
+              color: const Color(0xFF173B75),
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -1061,12 +1239,12 @@ class _EmptyExpensesState extends StatelessWidget {
             'Agrega el primer gasto del grupo para empezar a organizar las cuentas.',
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyMedium?.copyWith(
-              color: colors.onSurfaceVariant,
+              color: const Color(0xFF687C8D),
               height: 1.5,
             ),
           ),
           const SizedBox(height: 18),
-          Icon(Icons.south_rounded, size: 20, color: colors.primary),
+          const Icon(Icons.south_rounded, size: 20, color: Color(0xFF087F8C)),
         ],
       ),
     );

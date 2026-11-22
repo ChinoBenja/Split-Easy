@@ -36,9 +36,29 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen> {
     final colors = theme.colorScheme;
 
     return Scaffold(
-      backgroundColor: colors.surface,
+      backgroundColor: const Color(0xFFEAF4FB),
       appBar: AppBar(
-        title: const Text('Analítica financiera'),
+        toolbarHeight: 68,
+        title: Text(
+          'Analítica financiera',
+          style: theme.textTheme.titleLarge?.copyWith(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+              colors: [Color(0xFF173B75), Color(0xFF2457C5), Color(0xFF087F8C)],
+            ),
+          ),
+        ),
+        backgroundColor: const Color(0xFF173B75),
+        foregroundColor: Colors.white,
+        elevation: 0,
+        scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
       ),
       body: StreamBuilder<List<ExpenseModel>>(
@@ -79,12 +99,8 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen> {
               constraints: const BoxConstraints(maxWidth: 1160),
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final contentWidth = constraints.maxWidth - 48;
-                  final kpiColumns = contentWidth >= 900
-                      ? 4
-                      : contentWidth >= 560
-                      ? 2
-                      : 1;
+                  final contentWidth = math.max(0.0, constraints.maxWidth - 48);
+                  final kpiColumns = contentWidth >= 900 ? 4 : 2;
                   final kpiGap = 12.0;
                   final kpiWidth =
                       (contentWidth - (kpiGap * (kpiColumns - 1))) / kpiColumns;
@@ -93,32 +109,23 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen> {
                   return ListView(
                     padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
                     children: [
-                      Text(
-                        widget.group.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.4,
-                        ),
+                      _AnalyticsHeader(
+                        groupName: widget.group.name,
+                        expenseCount: expenses.length,
+                        memberCount: widget.group.memberIds.length,
+                        total: analytics.total,
+                        currencyFormat: _currencyFormat,
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Indicadores y patrones basados en los gastos registrados.',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: colors.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 18),
                       Wrap(
                         spacing: kpiGap,
                         runSpacing: kpiGap,
                         children: [
                           _KpiCard(
                             width: kpiWidth,
-                            icon: Icons.account_balance_wallet_outlined,
-                            label: 'Gasto total',
-                            value: _currencyFormat.format(analytics.total),
+                            icon: Icons.receipt_long_rounded,
+                            label: 'Gastos registrados',
+                            value: expenses.length.toString(),
                             accent: colors.primary,
                           ),
                           _KpiCard(
@@ -149,7 +156,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen> {
                             value: _currencyFormat.format(
                               analytics.averagePerMember,
                             ),
-                            accent: const Color(0xFF6750A4),
+                            accent: const Color(0xFF3B82A0),
                           ),
                           _KpiCard(
                             width: kpiWidth,
@@ -158,11 +165,11 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen> {
                             value: analytics.topCategory == null
                                 ? 'Sin datos'
                                 : '${analytics.topCategory} · ${analytics.topCategoryPercent.toStringAsFixed(0)}%',
-                            accent: const Color(0xFFB85C38),
+                            accent: const Color(0xFF087F8C),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 28),
+                      const SizedBox(height: 24),
                       if (chartsSideBySide)
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -229,7 +236,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen> {
                           ),
                         ),
                       ],
-                      const SizedBox(height: 28),
+                      const SizedBox(height: 24),
                       _SectionHeading(
                         title: 'Insights y Patrones de Consumo',
                         subtitle:
@@ -420,6 +427,253 @@ String _makeInsightSummary({
   return parts.join(' ');
 }
 
+class _AnalyticsHeader extends StatelessWidget {
+  const _AnalyticsHeader({
+    required this.groupName,
+    required this.expenseCount,
+    required this.memberCount,
+    required this.total,
+    required this.currencyFormat,
+  });
+
+  final String groupName;
+  final int expenseCount;
+  final int memberCount;
+  final double total;
+  final NumberFormat currencyFormat;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF102E63), Color(0xFF2457C5), Color(0xFF087F8C)],
+        ),
+        borderRadius: BorderRadius.circular(26),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF173B75).withValues(alpha: 0.24),
+            blurRadius: 26,
+            offset: const Offset(0, 11),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          Positioned(
+            right: -38,
+            top: -76,
+            child: Container(
+              width: 210,
+              height: 210,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.08),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+          Positioned(
+            right: 86,
+            bottom: -92,
+            child: Container(
+              width: 156,
+              height: 156,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.06),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+          Positioned(
+            right: 18,
+            bottom: 20,
+            child: Icon(
+              Icons.insights_rounded,
+              size: 96,
+              color: Colors.white.withValues(alpha: 0.07),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(21, 20, 21, 19),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(15),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.2),
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.insights_rounded,
+                        color: Colors.white,
+                        size: 21,
+                      ),
+                    ),
+                    const SizedBox(width: 11),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'RESUMEN FINANCIERO',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: Colors.white.withValues(alpha: 0.77),
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            groupName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFB7F1DC).withValues(alpha: 0.17),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: const Color(
+                            0xFFB7F1DC,
+                          ).withValues(alpha: 0.32),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 7,
+                            height: 7,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF9EF0C9),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            'ACTIVO',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.4,
+                              fontSize: 9,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 22),
+                Text(
+                  'GASTO ACUMULADO',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: Colors.white.withValues(alpha: 0.82),
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    currencyFormat.format(total),
+                    maxLines: 1,
+                    style: theme.textTheme.displaySmall?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -1.1,
+                      height: 1.08,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 19),
+                Wrap(
+                  spacing: 9,
+                  runSpacing: 8,
+                  children: [
+                    _AnalyticsSummaryPill(
+                      icon: Icons.receipt_long_rounded,
+                      label:
+                          '$expenseCount ${expenseCount == 1 ? 'gasto' : 'gastos'}',
+                    ),
+                    _AnalyticsSummaryPill(
+                      icon: Icons.groups_rounded,
+                      label:
+                          '$memberCount ${memberCount == 1 ? 'integrante' : 'integrantes'}',
+                    ),
+                    _AnalyticsSummaryPill(
+                      icon: Icons.auto_awesome_rounded,
+                      label: 'Datos del grupo',
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AnalyticsSummaryPill extends StatelessWidget {
+  const _AnalyticsSummaryPill({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: const Color(0xFFC9F4F1)),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _KpiCard extends StatelessWidget {
   const _KpiCard({
     required this.width,
@@ -438,51 +692,74 @@ class _KpiCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colors = theme.colorScheme;
     return SizedBox(
       width: width,
+      height: 112,
       child: Card(
         margin: EdgeInsets.zero,
-        elevation: 1,
-        shadowColor: colors.shadow.withValues(alpha: 0.06),
-        color: colors.surfaceContainerLow,
+        elevation: 2,
+        shadowColor: accent.withValues(alpha: 0.1),
+        color: Colors.white,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: colors.outlineVariant.withValues(alpha: 0.5)),
+          side: BorderSide(color: accent.withValues(alpha: 0.2)),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: Stack(
             children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, color: accent, size: 20),
+              Positioned(
+                left: 0,
+                top: 0,
+                bottom: 0,
+                child: Container(width: 4, color: accent),
               ),
-              const SizedBox(height: 13),
-              Text(
-                label,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: colors.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 5),
-              Text(
-                value,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.titleLarge?.copyWith(
-                  color: accent,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.3,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(13, 11, 12, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 30,
+                          height: 30,
+                          decoration: BoxDecoration(
+                            color: accent.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(icon, color: accent, size: 17),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            label,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: const Color(0xFF687C8D),
+                              fontWeight: FontWeight.w700,
+                              height: 1.1,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Spacer(),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        value,
+                        maxLines: 1,
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          color: accent,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -514,10 +791,10 @@ class _SectionHeading extends StatelessWidget {
           width: 42,
           height: 42,
           decoration: BoxDecoration(
-            color: colors.primaryContainer,
+            color: const Color(0xFFE7F3F8),
             borderRadius: BorderRadius.circular(14),
           ),
-          child: Icon(icon, color: colors.onPrimaryContainer, size: 21),
+          child: Icon(icon, color: const Color(0xFF087F8C), size: 21),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -527,6 +804,7 @@ class _SectionHeading extends StatelessWidget {
               Text(
                 title,
                 style: theme.textTheme.titleLarge?.copyWith(
+                  color: const Color(0xFF173B75),
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -588,13 +866,13 @@ class _CategoryChartCard extends StatelessWidget {
 
   static const _palette = [
     Color(0xFF087F8C),
-    Color(0xFF6750A4),
-    Color(0xFFB85C38),
-    Color(0xFF3B6B57),
-    Color(0xFF4267A8),
-    Color(0xFF9A4775),
-    Color(0xFF8A6D1D),
-    Color(0xFF53717A),
+    Color(0xFF2457C5),
+    Color(0xFF54A6C7),
+    Color(0xFF3B82A0),
+    Color(0xFF176B87),
+    Color(0xFF6FB8C7),
+    Color(0xFF3D7191),
+    Color(0xFF8ACAD5),
   ];
 
   @override
@@ -625,17 +903,18 @@ class _CategoryChartCard extends StatelessWidget {
     return Card(
       margin: EdgeInsets.zero,
       elevation: 1,
-      color: colors.surfaceContainerLow,
+      shadowColor: const Color(0xFF173B75).withValues(alpha: 0.06),
+      color: Colors.white,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(22),
-        side: BorderSide(color: colors.outlineVariant.withValues(alpha: 0.5)),
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: Color(0xFFDCE8EF)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(18),
         child: Column(
           children: [
             SizedBox(
-              height: 230,
+              height: 210,
               child: entries.isEmpty || total <= 0
                   ? _ChartEmptyState(label: 'Aún no hay datos por categoría')
                   : PieChart(
@@ -665,14 +944,14 @@ class _CategoryChartCard extends StatelessWidget {
                     : category.value / total * 100;
                 final isSelected = touchedIndex == index;
                 return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  padding: const EdgeInsets.symmetric(vertical: 2),
                   child: InkWell(
                     borderRadius: BorderRadius.circular(10),
                     onTap: () => onTouched(isSelected ? -1 : index),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 6,
-                        vertical: 5,
+                        vertical: 6,
                       ),
                       child: Row(
                         children: [
@@ -688,6 +967,8 @@ class _CategoryChartCard extends StatelessWidget {
                           Expanded(
                             child: Text(
                               category.key,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: theme.textTheme.bodyMedium?.copyWith(
                                 fontWeight: isSelected
                                     ? FontWeight.w700
@@ -695,17 +976,28 @@ class _CategoryChartCard extends StatelessWidget {
                               ),
                             ),
                           ),
-                          Text(
-                            '${percentage.toStringAsFixed(1)}%',
-                            style: theme.textTheme.labelLarge?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            currencyFormat.format(category.value),
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: colors.onSurfaceVariant,
+                          const SizedBox(width: 10),
+                          SizedBox(
+                            width: 96,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerRight,
+                                  child: Text(
+                                    currencyFormat.format(category.value),
+                                    style: theme.textTheme.labelMedium
+                                        ?.copyWith(fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                                Text(
+                                  '${percentage.toStringAsFixed(1)}%',
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: colors.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
@@ -745,18 +1037,21 @@ class _MemberContributionCard extends StatelessWidget {
       0,
       (maximum, entry) => math.max(maximum, entry.value),
     );
+    final chartMaxY = maxValue <= 0 ? 1.0 : maxValue * 1.2;
+    final axisInterval = maxValue <= 0 ? 1.0 : chartMaxY / 4;
     final barColor = colors.primary;
 
     return Card(
       margin: EdgeInsets.zero,
       elevation: 1,
-      color: colors.surfaceContainerLow,
+      shadowColor: const Color(0xFF173B75).withValues(alpha: 0.06),
+      color: Colors.white,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(22),
-        side: BorderSide(color: colors.outlineVariant.withValues(alpha: 0.5)),
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: Color(0xFFDCE8EF)),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 18, 18, 14),
+        padding: const EdgeInsets.fromLTRB(12, 16, 12, 14),
         child: entries.isEmpty
             ? const SizedBox(
                 height: 230,
@@ -768,7 +1063,7 @@ class _MemberContributionCard extends StatelessWidget {
                     height: 220,
                     child: BarChart(
                       BarChartData(
-                        maxY: maxValue <= 0 ? 1 : maxValue * 1.2,
+                        maxY: chartMaxY,
                         alignment: BarChartAlignment.spaceAround,
                         barTouchData: BarTouchData(
                           enabled: true,
@@ -788,9 +1083,9 @@ class _MemberContributionCard extends StatelessWidget {
                         gridData: FlGridData(
                           show: true,
                           drawVerticalLine: false,
-                          horizontalInterval: maxValue <= 0 ? 1 : maxValue / 4,
+                          horizontalInterval: axisInterval,
                           getDrawingHorizontalLine: (_) => FlLine(
-                            color: colors.outlineVariant.withValues(alpha: 0.5),
+                            color: const Color(0xFFDCE8EF),
                             strokeWidth: 1,
                             dashArray: [4, 4],
                           ),
@@ -806,37 +1101,59 @@ class _MemberContributionCard extends StatelessWidget {
                           leftTitles: AxisTitles(
                             sideTitles: SideTitles(
                               showTitles: true,
-                              reservedSize: 48,
-                              getTitlesWidget: (value, meta) => Text(
-                                _compactCurrency(value),
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                  color: colors.onSurfaceVariant,
-                                  fontSize: 10,
-                                ),
-                              ),
+                              reservedSize: 54,
+                              interval: axisInterval,
+                              getTitlesWidget: (value, meta) {
+                                if (value >= chartMaxY - axisInterval * 0.2) {
+                                  return const SizedBox.shrink();
+                                }
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 4),
+                                  child: Text(
+                                    _compactCurrency(value),
+                                    textAlign: TextAlign.right,
+                                    maxLines: 1,
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: colors.onSurfaceVariant,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                );
+                              },
                             ),
                           ),
                           bottomTitles: AxisTitles(
                             sideTitles: SideTitles(
                               showTitles: true,
-                              reservedSize: 36,
+                              reservedSize: 42,
                               getTitlesWidget: (value, meta) {
                                 final index = value.toInt();
                                 if (index < 0 || index >= entries.length) {
                                   return const SizedBox.shrink();
                                 }
+                                final name =
+                                    memberNames[entries[index].key] ??
+                                    'Usuario';
                                 return Padding(
-                                  padding: const EdgeInsets.only(top: 8),
-                                  child: Text(
-                                    _shortName(
-                                      memberNames[entries[index].key] ??
-                                          'Usuario',
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.labelSmall?.copyWith(
-                                      color: colors.onSurfaceVariant,
-                                      fontSize: 10,
+                                  padding: const EdgeInsets.only(
+                                    top: 6,
+                                    left: 2,
+                                    right: 2,
+                                  ),
+                                  child: SizedBox(
+                                    width: entries.length > 5 ? 48 : 68,
+                                    child: Text(
+                                      name,
+                                      maxLines: 2,
+                                      softWrap: true,
+                                      overflow: TextOverflow.ellipsis,
+                                      textAlign: TextAlign.center,
+                                      style: theme.textTheme.labelSmall
+                                          ?.copyWith(
+                                            color: colors.onSurfaceVariant,
+                                            fontSize: 9,
+                                            height: 1.05,
+                                          ),
                                     ),
                                   ),
                                 );
@@ -859,9 +1176,8 @@ class _MemberContributionCard extends StatelessWidget {
                                 ),
                                 backDrawRodData: BackgroundBarChartRodData(
                                   show: true,
-                                  toY: maxValue <= 0 ? 1 : maxValue * 1.2,
-                                  color: colors.surfaceContainerHighest
-                                      .withValues(alpha: 0.55),
+                                  toY: chartMaxY,
+                                  color: const Color(0xFFEAF4FB),
                                 ),
                               ),
                             ],
@@ -925,48 +1241,71 @@ class _InsightsCard extends StatelessWidget {
     return Card(
       margin: EdgeInsets.zero,
       elevation: 1,
-      color: colors.surfaceContainerLow,
+      shadowColor: const Color(0xFF173B75).withValues(alpha: 0.06),
+      color: Colors.white,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(22),
-        side: BorderSide(color: colors.outlineVariant.withValues(alpha: 0.5)),
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: Color(0xFFDCE8EF)),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF6750A4).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(13),
+            Container(
+              padding: const EdgeInsets.all(13),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE7F3F8),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      Icons.lightbulb_outline_rounded,
+                      color: colors.primary,
+                      size: 20,
+                    ),
                   ),
-                  child: const Icon(
-                    Icons.lightbulb_outline_rounded,
-                    color: Color(0xFF6750A4),
+                  const SizedBox(width: 11),
+                  Expanded(
+                    child: Text(
+                      analytics.insightSummary,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        height: 1.45,
+                        color: colors.onSurface,
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    analytics.insightSummary,
-                    style: theme.textTheme.bodyMedium?.copyWith(height: 1.45),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
             if (analytics.peakWeekday != null) ...[
-              const SizedBox(height: 18),
-              _InsightRow(
-                icon: Icons.calendar_view_week_rounded,
-                label: 'Día con mayor flujo',
-                value:
-                    '${_capitalize(analytics.peakWeekday!)} · ${currencyFormat.format(analytics.peakWeekdayTotal)}',
-                color: colors.primary,
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 11,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF5FAFD),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFDCE8EF)),
+                ),
+                child: _InsightRow(
+                  icon: Icons.calendar_view_week_rounded,
+                  label: 'Día con mayor flujo',
+                  value:
+                      '${_capitalize(analytics.peakWeekday!)} · ${currencyFormat.format(analytics.peakWeekdayTotal)}',
+                  color: colors.primary,
+                ),
               ),
             ],
             if (analytics.outliers.isNotEmpty) ...[
@@ -1088,15 +1427,15 @@ class _ChartEmptyState extends StatelessWidget {
 }
 
 String _compactCurrency(double value) {
-  if (value >= 1000000) return '\$${(value / 1000000).toStringAsFixed(1)}M';
-  if (value >= 1000) return '\$${(value / 1000).toStringAsFixed(0)}k';
+  if (value >= 1000000) {
+    return '\$${(value / 1000000).toStringAsFixed(1)}M';
+  }
+  if (value >= 1000) {
+    final thousands = value / 1000;
+    final formatted = thousands.toStringAsFixed(thousands >= 10 ? 0 : 1);
+    return '\$${formatted.endsWith('.0') ? formatted.substring(0, formatted.length - 2) : formatted}k';
+  }
   return '\$${value.toStringAsFixed(0)}';
-}
-
-String _shortName(String name) {
-  final trimmed = name.trim();
-  if (trimmed.length <= 9) return trimmed;
-  return '${trimmed.substring(0, 8)}…';
 }
 
 String _capitalize(String value) =>
