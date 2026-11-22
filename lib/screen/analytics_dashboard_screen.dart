@@ -38,15 +38,25 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFEAF4FB),
       appBar: AppBar(
+        toolbarHeight: 68,
         title: Text(
           'Analítica financiera',
           style: theme.textTheme.titleLarge?.copyWith(
-            color: const Color(0xFF173B75),
-            fontWeight: FontWeight.w700,
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
           ),
         ),
-        backgroundColor: const Color(0xFFEAF4FB),
-        foregroundColor: const Color(0xFF173B75),
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+              colors: [Color(0xFF173B75), Color(0xFF2457C5), Color(0xFF087F8C)],
+            ),
+          ),
+        ),
+        backgroundColor: const Color(0xFF173B75),
+        foregroundColor: Colors.white,
         elevation: 0,
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
@@ -102,6 +112,9 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen> {
                       _AnalyticsHeader(
                         groupName: widget.group.name,
                         expenseCount: expenses.length,
+                        memberCount: widget.group.memberIds.length,
+                        total: analytics.total,
+                        currencyFormat: _currencyFormat,
                       ),
                       const SizedBox(height: 18),
                       Wrap(
@@ -110,9 +123,9 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen> {
                         children: [
                           _KpiCard(
                             width: kpiWidth,
-                            icon: Icons.account_balance_wallet_outlined,
-                            label: 'Gasto total',
-                            value: _currencyFormat.format(analytics.total),
+                            icon: Icons.receipt_long_rounded,
+                            label: 'Gastos registrados',
+                            value: expenses.length.toString(),
                             accent: colors.primary,
                           ),
                           _KpiCard(
@@ -415,10 +428,19 @@ String _makeInsightSummary({
 }
 
 class _AnalyticsHeader extends StatelessWidget {
-  const _AnalyticsHeader({required this.groupName, required this.expenseCount});
+  const _AnalyticsHeader({
+    required this.groupName,
+    required this.expenseCount,
+    required this.memberCount,
+    required this.total,
+    required this.currencyFormat,
+  });
 
   final String groupName;
   final int expenseCount;
+  final int memberCount;
+  final double total;
+  final NumberFormat currencyFormat;
 
   @override
   Widget build(BuildContext context) {
@@ -428,14 +450,14 @@ class _AnalyticsHeader extends StatelessWidget {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF3B82B8), Color(0xFF69B8D0)],
+          colors: [Color(0xFF102E63), Color(0xFF2457C5), Color(0xFF087F8C)],
         ),
         borderRadius: BorderRadius.circular(26),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF176B87).withValues(alpha: 0.18),
-            blurRadius: 22,
-            offset: const Offset(0, 9),
+            color: const Color(0xFF173B75).withValues(alpha: 0.24),
+            blurRadius: 26,
+            offset: const Offset(0, 11),
           ),
         ],
       ),
@@ -443,42 +465,51 @@ class _AnalyticsHeader extends StatelessWidget {
       child: Stack(
         children: [
           Positioned(
-            right: -28,
-            top: -54,
+            right: -38,
+            top: -76,
             child: Container(
-              width: 156,
-              height: 156,
+              width: 210,
+              height: 210,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.09),
+                color: Colors.white.withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
             ),
           ),
           Positioned(
-            right: 68,
-            bottom: -72,
+            right: 86,
+            bottom: -92,
             child: Container(
-              width: 124,
-              height: 124,
+              width: 156,
+              height: 156,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.07),
+                color: Colors.white.withValues(alpha: 0.06),
                 shape: BoxShape.circle,
               ),
             ),
           ),
+          Positioned(
+            right: 18,
+            bottom: 20,
+            child: Icon(
+              Icons.insights_rounded,
+              size: 96,
+              color: Colors.white.withValues(alpha: 0.07),
+            ),
+          ),
           Padding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.fromLTRB(21, 20, 21, 19),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
                     Container(
-                      width: 38,
-                      height: 38,
+                      width: 42,
+                      height: 42,
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(13),
+                        borderRadius: BorderRadius.circular(15),
                         border: Border.all(
                           color: Colors.white.withValues(alpha: 0.2),
                         ),
@@ -490,69 +521,151 @@ class _AnalyticsHeader extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 11),
-                    Text(
-                      'ANALÍTICA DEL GRUPO',
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: Colors.white.withValues(alpha: 0.9),
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1.1,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'RESUMEN FINANCIERO',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: Colors.white.withValues(alpha: 0.77),
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            groupName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFB7F1DC).withValues(alpha: 0.17),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: const Color(
+                            0xFFB7F1DC,
+                          ).withValues(alpha: 0.32),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 7,
+                            height: 7,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF9EF0C9),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            'ACTIVO',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.4,
+                              fontSize: 9,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 17),
+                const SizedBox(height: 22),
                 Text(
-                  groupName,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    color: Colors.white,
+                  'GASTO ACUMULADO',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: Colors.white.withValues(alpha: 0.82),
                     fontWeight: FontWeight.w800,
-                    letterSpacing: -0.4,
-                    height: 1.1,
+                    letterSpacing: 1.2,
                   ),
                 ),
-                const SizedBox(height: 7),
-                Text(
-                  'Indicadores y patrones basados en los gastos registrados.',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: Colors.white.withValues(alpha: 0.88),
-                    height: 1.35,
-                  ),
-                ),
-                const SizedBox(height: 15),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 11,
-                    vertical: 7,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.16),
-                    borderRadius: BorderRadius.circular(30),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.17),
+                const SizedBox(height: 2),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    currencyFormat.format(total),
+                    maxLines: 1,
+                    style: theme.textTheme.displaySmall?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -1.1,
+                      height: 1.08,
                     ),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.receipt_long_rounded,
-                        size: 15,
-                        color: Colors.white,
-                      ),
-                      const SizedBox(width: 7),
-                      Text(
-                        '$expenseCount ${expenseCount == 1 ? 'gasto registrado' : 'gastos registrados'}',
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
+                ),
+                const SizedBox(height: 19),
+                Wrap(
+                  spacing: 9,
+                  runSpacing: 8,
+                  children: [
+                    _AnalyticsSummaryPill(
+                      icon: Icons.receipt_long_rounded,
+                      label:
+                          '$expenseCount ${expenseCount == 1 ? 'gasto' : 'gastos'}',
+                    ),
+                    _AnalyticsSummaryPill(
+                      icon: Icons.groups_rounded,
+                      label:
+                          '$memberCount ${memberCount == 1 ? 'integrante' : 'integrantes'}',
+                    ),
+                    _AnalyticsSummaryPill(
+                      icon: Icons.auto_awesome_rounded,
+                      label: 'Datos del grupo',
+                    ),
+                  ],
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AnalyticsSummaryPill extends StatelessWidget {
+  const _AnalyticsSummaryPill({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: const Color(0xFFC9F4F1)),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],
@@ -581,72 +694,71 @@ class _KpiCard extends StatelessWidget {
     final theme = Theme.of(context);
     return SizedBox(
       width: width,
-      height: 96,
+      height: 112,
       child: Card(
         margin: EdgeInsets.zero,
-        elevation: 1,
-        shadowColor: const Color(0xFF173B75).withValues(alpha: 0.07),
+        elevation: 2,
+        shadowColor: accent.withValues(alpha: 0.1),
         color: Colors.white,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-          side: BorderSide(color: accent.withValues(alpha: 0.22)),
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: accent.withValues(alpha: 0.2)),
         ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
-          child: Row(
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: Stack(
             children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(11),
-                ),
-                child: Icon(icon, color: accent, size: 18),
+              Positioned(
+                left: 0,
+                top: 0,
+                bottom: 0,
+                child: Container(width: 4, color: accent),
               ),
-              const SizedBox(width: 9),
-              Expanded(
+              Padding(
+                padding: const EdgeInsets.fromLTRB(13, 11, 12, 10),
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      label,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: const Color(0xFF687C8D),
-                        fontWeight: FontWeight.w600,
-                        height: 1.15,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    if (value.startsWith('\$'))
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          value,
-                          maxLines: 1,
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            color: accent,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -0.2,
+                    Row(
+                      children: [
+                        Container(
+                          width: 30,
+                          height: 30,
+                          decoration: BoxDecoration(
+                            color: accent.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(icon, color: accent, size: 17),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            label,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: const Color(0xFF687C8D),
+                              fontWeight: FontWeight.w700,
+                              height: 1.1,
+                            ),
                           ),
                         ),
-                      )
-                    else
-                      Text(
+                      ],
+                    ),
+                    const Spacer(),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
                         value,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleSmall?.copyWith(
+                        maxLines: 1,
+                        style: theme.textTheme.titleLarge?.copyWith(
                           color: accent,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.2,
-                          height: 1.15,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -0.5,
                         ),
                       ),
+                    ),
                   ],
                 ),
               ),

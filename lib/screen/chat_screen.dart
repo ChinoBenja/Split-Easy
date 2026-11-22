@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -29,7 +31,8 @@ class _ChatScreenState extends State<ChatScreen> {
   StreamSubscription<List<ChatMessage>>? _readReceiptSubscription;
   bool _isSending = false;
   bool _isPickingImage = false;
-  bool _isUploadingImage = false;
+  bool _isSendingImage = false;
+  String _imageSendStatus = 'Enviando comprobante...';
 
   @override
   void initState() {
@@ -49,6 +52,11 @@ class _ChatScreenState extends State<ChatScreen> {
           debugPrintStack(stackTrace: stackTrace);
         },
       );
+    }
+    if (_supportsLostImageRecovery) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(_restoreLostChatImage());
+      });
     }
   }
 
@@ -123,64 +131,36 @@ class _ChatScreenState extends State<ChatScreen> {
       _isPickingImage = true;
     });
     try {
-      final image = await ImagePicker().pickImage(
+      final picker = ImagePicker();
+      var image = await picker.pickImage(
         source: ImageSource.gallery,
-        maxWidth: 1920,
-        maxHeight: 1920,
-        imageQuality: 85,
+        maxWidth: 1200,
+        maxHeight: 1200,
+        imageQuality: 75,
       );
       if (!mounted) return;
+      if (image == null && _supportsLostImageRecovery) {
+        final lostData = await picker.retrieveLostData();
+        if (!mounted) return;
+        if (lostData.exception != null) throw lostData.exception!;
+        image = lostData.files?.firstOrNull;
+      }
       if (image == null) return;
 
-      if (mounted) {
-        setState(() {
-          _isPickingImage = false;
-          _isUploadingImage = true;
-        });
-      }
-      final extension = image.name.contains('.')
-          ? image.name.split('.').last.toLowerCase()
-          : 'jpg';
-      final safeExtension = RegExp(r'^[a-z0-9]+$').hasMatch(extension)
-          ? extension
-          : 'jpg';
-      final contentType = image.mimeType?.startsWith('image/') == true
-          ? image.mimeType!
-          : 'image/$safeExtension';
-      final storageRef = FirebaseStorage.instance.ref().child(
-        'chat_images/${widget.group.id}/${DateTime.now().microsecondsSinceEpoch}_${user.uid}.$safeExtension',
-      );
-      final bytes = await image.readAsBytes();
-      if (!mounted) return;
-      if (bytes.length > 10 * 1024 * 1024) {
-        throw StateError('La imagen no puede superar los 10 MB.');
-      }
-      await storageRef.putData(
-        bytes,
-        SettableMetadata(contentType: contentType),
-      );
-      if (!mounted) return;
-      final imageUrl = await storageRef.getDownloadURL();
-      if (!mounted) return;
-
-      await _firestoreService.sendTextMessage(
-        groupId: widget.group.id,
-        senderId: user.uid,
-        senderName:
-            widget.group.memberNames[user.uid] ??
-            user.displayName ??
-            user.email ??
-            'Usuario',
-        text: _messageController.text.trim(),
-        imageUrl: imageUrl,
-        senderPhotoUrl: user.photoURL,
-      );
-      if (!mounted) return;
-      _messageController.clear();
+      setState(() {
+        _isPickingImage = false;
+        _isSendingImage = true;
+        _imageSendStatus = 'Comprimiendo comprobante...';
+      });
+      await _compressAndSendImage(image, user);
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('No se pudo enviar la imagen: $error')),
+          SnackBar(
+            content: Text(
+              'No se pudo enviar el comprobante: ${_errorMessage(error)}',
+            ),
+          ),
         );
       }
     } finally {
@@ -188,10 +168,104 @@ class _ChatScreenState extends State<ChatScreen> {
         setState(() {
           _isSending = false;
           _isPickingImage = false;
-          _isUploadingImage = false;
+          _isSendingImage = false;
         });
       }
     }
+  }
+
+  bool get _supportsLostImageRecovery =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+  Future<void> _restoreLostChatImage() async {
+    if (!mounted) return;
+    try {
+      final lostData = await ImagePicker().retrieveLostData();
+      if (!mounted || lostData.isEmpty) return;
+      if (lostData.exception != null) throw lostData.exception!;
+      final image = lostData.files?.firstOrNull;
+      if (image == null) {
+        throw StateError('No se pudo recuperar la imagen seleccionada.');
+      }
+
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw StateError('Inicia sesión para enviar imágenes.');
+      }
+      setState(() {
+        _isSending = true;
+        _isPickingImage = false;
+        _isSendingImage = true;
+        _imageSendStatus = 'Comprimiendo comprobante...';
+      });
+      await _compressAndSendImage(image, user);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'No se pudo recuperar el comprobante: ${_errorMessage(error)}',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSending = false;
+          _isPickingImage = false;
+          _isSendingImage = false;
+        });
+      }
+    }
+  }
+
+  String _errorMessage(Object error) {
+    if (error is StateError) return error.message.toString();
+    if (error is ArgumentError) return error.message?.toString() ?? '$error';
+    return '$error';
+  }
+
+  Future<void> _compressAndSendImage(XFile image, User user) async {
+    final bytes = await image.readAsBytes().timeout(
+      const Duration(seconds: 30),
+      onTimeout: () =>
+          throw TimeoutException('No se pudo leer la imagen del dispositivo.'),
+    );
+    if (!mounted) return;
+    final imageBase64 = base64Encode(bytes);
+    if (imageBase64.length > FirestoreService.maxChatImageBase64Length) {
+      throw StateError(
+        'El comprobante comprimido supera los 700 KB permitidos. '
+        'Recórtalo o selecciona una imagen más liviana.',
+      );
+    }
+    final contentType = image.mimeType?.startsWith('image/') == true
+        ? image.mimeType!
+        : 'image/jpeg';
+    setState(() => _imageSendStatus = 'Guardando comprobante en el chat...');
+    await _firestoreService
+        .sendImageMessage(
+          groupId: widget.group.id,
+          senderId: user.uid,
+          senderName:
+              widget.group.memberNames[user.uid] ??
+              user.displayName ??
+              user.email ??
+              'Usuario',
+          imageBase64: imageBase64,
+          imageContentType: contentType,
+          text: _messageController.text.trim(),
+          senderPhotoUrl: user.photoURL,
+        )
+        .timeout(
+          const Duration(seconds: 30),
+          onTimeout: () => throw TimeoutException(
+            'Firestore no respondió al publicar la imagen en el chat.',
+          ),
+        );
+    if (!mounted) return;
+    _messageController.clear();
   }
 
   @override
@@ -202,23 +276,46 @@ class _ChatScreenState extends State<ChatScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFEAF4FB),
       appBar: AppBar(
+        toolbarHeight: 76,
         titleSpacing: 0,
         title: Row(
           children: [
             Container(
-              width: 38,
-              height: 38,
+              width: 48,
+              height: 48,
+              padding: const EdgeInsets.all(2),
               decoration: BoxDecoration(
-                color: const Color(0xFFE7F3F8),
-                borderRadius: BorderRadius.circular(13),
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.3),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.75),
+                  width: 1.5,
+                ),
               ),
-              child: const Icon(
-                Icons.forum_rounded,
-                color: Color(0xFF087F8C),
-                size: 20,
+              child: ClipOval(
+                child: widget.group.photoSource == null
+                    ? Container(
+                        color: Colors.white.withValues(alpha: 0.18),
+                        child: const Icon(
+                          Icons.groups_rounded,
+                          color: Colors.white,
+                          size: 25,
+                        ),
+                      )
+                    : ProfilePhotoImage(
+                        source: widget.group.photoSource!,
+                        fallback: Container(
+                          color: Colors.white.withValues(alpha: 0.18),
+                          child: const Icon(
+                            Icons.groups_rounded,
+                            color: Colors.white,
+                            size: 25,
+                          ),
+                        ),
+                      ),
               ),
             ),
-            const SizedBox(width: 11),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -229,23 +326,60 @@ class _ChatScreenState extends State<ChatScreen> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.titleMedium?.copyWith(
-                      color: const Color(0xFF173B75),
-                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
-                  Text(
-                    'Chat del grupo',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: const Color(0xFF687C8D),
-                    ),
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.people_alt_rounded,
+                        color: Color(0xFFC9F4F1),
+                        size: 14,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${widget.group.memberIds.length} integrantes · chat grupal',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.88),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
+            const SizedBox(width: 8),
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+              ),
+              child: const Icon(
+                Icons.forum_rounded,
+                color: Colors.white,
+                size: 19,
+              ),
+            ),
+            const SizedBox(width: 12),
           ],
         ),
-        backgroundColor: const Color(0xFFEAF4FB),
-        foregroundColor: const Color(0xFF173B75),
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF173B75), Color(0xFF2457C5), Color(0xFF087F8C)],
+            ),
+          ),
+        ),
+        backgroundColor: const Color(0xFF173B75),
+        foregroundColor: Colors.white,
         elevation: 0,
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
@@ -253,150 +387,219 @@ class _ChatScreenState extends State<ChatScreen> {
       body: Column(
         children: [
           Expanded(
-            child: StreamBuilder<List<ChatMessage>>(
-              stream: _messagesStream,
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        'No se pudieron cargar los mensajes: ${snapshot.error}',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: const Color(0xFFD94E61),
+            child: DecoratedBox(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFFF4F9FC), Color(0xFFEAF4FB)],
+                ),
+              ),
+              child: StreamBuilder<List<ChatMessage>>(
+                stream: _messagesStream,
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(
+                          'No se pudieron cargar los mensajes: ${snapshot.error}',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: const Color(0xFFD94E61),
+                          ),
                         ),
                       ),
-                    ),
-                  );
-                }
-                if (!snapshot.hasData) {
-                  return const Center(
-                    child: CircularProgressIndicator(color: Color(0xFF2457C5)),
-                  );
-                }
-                final messages = snapshot.data!;
-                if (messages.isEmpty) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Container(
-                        constraints: const BoxConstraints(maxWidth: 340),
-                        padding: const EdgeInsets.all(22),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(22),
-                          border: Border.all(color: const Color(0xFFDCE8EF)),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(
-                                0xFF173B75,
-                              ).withValues(alpha: 0.05),
-                              blurRadius: 16,
-                              offset: const Offset(0, 5),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 56,
-                              height: 56,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFE7F3F8),
-                                borderRadius: BorderRadius.circular(18),
-                              ),
-                              child: const Icon(
-                                Icons.forum_outlined,
-                                color: Color(0xFF087F8C),
-                                size: 28,
-                              ),
-                            ),
-                            const SizedBox(height: 13),
-                            Text(
-                              'Aún no hay mensajes',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                color: const Color(0xFF173B75),
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 5),
-                            Text(
-                              'Inicia la conversación con tu grupo.',
-                              textAlign: TextAlign.center,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: const Color(0xFF687C8D),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                }
-
-                return FutureBuilder<Map<String, String>>(
-                  future: _memberPhotoUrls,
-                  builder: (context, photoSnapshot) {
-                    final photoUrls =
-                        photoSnapshot.data ?? const <String, String>{};
-                    return ListView.builder(
-                      reverse: true,
-                      padding: const EdgeInsets.fromLTRB(14, 14, 14, 18),
-                      itemCount: messages.length,
-                      itemBuilder: (context, index) {
-                        final message = messages[index];
-                        final isMine = message.senderId == currentUid;
-
-                        if (message.type == 'system') {
-                          return _SystemMessageBubble(message: message);
-                        }
-                        if (message.type == 'proposal') {
-                          return _ProposalCard(
-                            group: widget.group,
-                            message: message,
-                            currentUid: currentUid,
-                          );
-                        }
-                        if (message.type == 'group_delete_proposal') {
-                          return _GroupDeletionProposalCard(
-                            group: widget.group,
-                            message: message,
-                            currentUid: currentUid,
-                          );
-                        }
-                        if (message.type == 'settlement_request') {
-                          return _SettlementRequestBubble(message: message);
-                        }
-                        final storedPhotoUrl = message.senderPhotoUrl?.trim();
-                        return _TextMessageBubble(
-                          message: message,
-                          isMine: isMine,
-                          photoUrl:
-                              photoUrls[message.senderId] ??
-                              (storedPhotoUrl == null || storedPhotoUrl.isEmpty
-                                  ? null
-                                  : storedPhotoUrl),
-                        );
-                      },
                     );
-                  },
-                );
-              },
+                  }
+                  if (!snapshot.hasData) {
+                    return const Center(
+                      child: CircularProgressIndicator(
+                        color: Color(0xFF2457C5),
+                      ),
+                    );
+                  }
+                  final messages = snapshot.data!;
+                  if (messages.isEmpty) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Container(
+                          constraints: const BoxConstraints(maxWidth: 350),
+                          padding: const EdgeInsets.fromLTRB(24, 25, 24, 23),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Colors.white, Color(0xFFF4FAFD)],
+                            ),
+                            borderRadius: BorderRadius.circular(28),
+                            border: Border.all(color: const Color(0xFFD9E9F0)),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(
+                                  0xFF173B75,
+                                ).withValues(alpha: 0.1),
+                                blurRadius: 24,
+                                offset: const Offset(0, 9),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 82,
+                                height: 82,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: const LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      Color(0xFF2457C5),
+                                      Color(0xFF087F8C),
+                                    ],
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(
+                                        0xFF2457C5,
+                                      ).withValues(alpha: 0.22),
+                                      blurRadius: 15,
+                                      offset: const Offset(0, 6),
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(
+                                  Icons.forum_rounded,
+                                  color: Colors.white,
+                                  size: 37,
+                                ),
+                              ),
+                              const SizedBox(height: 17),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 11,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFE7F3F8),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  'UN NUEVO COMIENZO',
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: const Color(0xFF087F8C),
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.65,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 11),
+                              Text(
+                                'Aún no hay mensajes',
+                                textAlign: TextAlign.center,
+                                style: theme.textTheme.titleLarge?.copyWith(
+                                  color: const Color(0xFF173B75),
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const SizedBox(height: 7),
+                              Text(
+                                'Saluda al grupo, comparte un gasto o envía un comprobante para empezar.',
+                                textAlign: TextAlign.center,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: const Color(0xFF687C8D),
+                                  height: 1.45,
+                                ),
+                              ),
+                              const SizedBox(height: 17),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  _ChatHintChip(
+                                    icon: Icons.chat_bubble_outline_rounded,
+                                    label: 'Conversar',
+                                  ),
+                                  const SizedBox(width: 8),
+                                  _ChatHintChip(
+                                    icon: Icons.receipt_long_rounded,
+                                    label: 'Comprobantes',
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+
+                  return FutureBuilder<Map<String, String>>(
+                    future: _memberPhotoUrls,
+                    builder: (context, photoSnapshot) {
+                      final photoUrls =
+                          photoSnapshot.data ?? const <String, String>{};
+                      return ListView.builder(
+                        reverse: true,
+                        padding: const EdgeInsets.fromLTRB(14, 14, 14, 18),
+                        itemCount: messages.length,
+                        itemBuilder: (context, index) {
+                          final message = messages[index];
+                          final isMine = message.senderId == currentUid;
+
+                          if (message.type == 'system') {
+                            return _SystemMessageBubble(message: message);
+                          }
+                          if (message.type == 'proposal') {
+                            return _ProposalCard(
+                              group: widget.group,
+                              message: message,
+                              currentUid: currentUid,
+                            );
+                          }
+                          if (message.type == 'group_delete_proposal') {
+                            return _GroupDeletionProposalCard(
+                              group: widget.group,
+                              message: message,
+                              currentUid: currentUid,
+                            );
+                          }
+                          if (message.type == 'settlement_request') {
+                            return _SettlementRequestBubble(message: message);
+                          }
+                          final storedPhotoUrl = message.senderPhotoUrl?.trim();
+                          return _TextMessageBubble(
+                            message: message,
+                            isMine: isMine,
+                            photoUrl:
+                                photoUrls[message.senderId] ??
+                                (storedPhotoUrl == null ||
+                                        storedPhotoUrl.isEmpty
+                                    ? null
+                                    : storedPhotoUrl),
+                          );
+                        },
+                      );
+                    },
+                  );
+                },
+              ),
             ),
           ),
           SafeArea(
             top: false,
             child: Container(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
               decoration: BoxDecoration(
                 color: Colors.white,
                 border: const Border(top: BorderSide(color: Color(0xFFDCE8EF))),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF173B75).withValues(alpha: 0.05),
-                    blurRadius: 12,
-                    offset: const Offset(0, -4),
+                    color: const Color(0xFF173B75).withValues(alpha: 0.09),
+                    blurRadius: 18,
+                    offset: const Offset(0, -6),
                   ),
                 ],
               ),
@@ -412,12 +615,12 @@ class _ChatScreenState extends State<ChatScreen> {
                           backgroundColor: Color(0xFFE7F3F8),
                         ),
                         Padding(
-                          padding: const EdgeInsets.only(top: 5),
+                          padding: const EdgeInsets.only(top: 5, bottom: 3),
                           child: Text(
                             _isPickingImage
                                 ? 'Seleccionando imagen...'
-                                : _isUploadingImage
-                                ? 'Enviando imagen...'
+                                : _isSendingImage
+                                ? _imageSendStatus
                                 : 'Enviando mensaje...',
                             style: theme.textTheme.labelSmall?.copyWith(
                               color: const Color(0xFF687C8D),
@@ -426,70 +629,116 @@ class _ChatScreenState extends State<ChatScreen> {
                         ),
                       ],
                     ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 9, 12, 10),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _messageController,
-                            textCapitalization: TextCapitalization.sentences,
-                            minLines: 1,
-                            maxLines: 5,
-                            decoration: InputDecoration(
-                              hintText: 'Escribe un mensaje...',
-                              hintStyle: const TextStyle(
-                                color: Color(0xFF687C8D),
-                              ),
-                              filled: true,
-                              fillColor: const Color(0xFFEAF4FB),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(24),
-                                borderSide: BorderSide.none,
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(24),
-                                borderSide: BorderSide.none,
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(24),
-                                borderSide: const BorderSide(
-                                  color: Color(0xFF54A6C7),
-                                  width: 1.3,
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF0F6FA),
+                            borderRadius: BorderRadius.circular(27),
+                            border: Border.all(color: const Color(0xFFDCE8EF)),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              const SizedBox(width: 15),
+                              Expanded(
+                                child: TextField(
+                                  controller: _messageController,
+                                  textCapitalization:
+                                      TextCapitalization.sentences,
+                                  minLines: 1,
+                                  maxLines: 5,
+                                  decoration: const InputDecoration(
+                                    hintText: 'Escribe al grupo...',
+                                    hintStyle: TextStyle(
+                                      color: Color(0xFF8293A0),
+                                    ),
+                                    border: InputBorder.none,
+                                    contentPadding: EdgeInsets.symmetric(
+                                      vertical: 13,
+                                    ),
+                                  ),
+                                  onSubmitted: (_) => _sendMessage(),
                                 ),
                               ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 17,
-                                vertical: 12,
+                              IconButton(
+                                onPressed: _isSending
+                                    ? null
+                                    : _pickAndSendImage,
+                                tooltip: 'Adjuntar imagen o comprobante',
+                                style: IconButton.styleFrom(
+                                  foregroundColor: const Color(0xFF087F8C),
+                                  disabledForegroundColor: const Color(
+                                    0xFFAAC3CE,
+                                  ),
+                                ),
+                                icon: const Icon(
+                                  Icons.add_photo_alternate_rounded,
+                                  size: 22,
+                                ),
                               ),
-                            ),
-                            onSubmitted: (_) => _sendMessage(),
+                              const SizedBox(width: 3),
+                            ],
                           ),
                         ),
-                        const SizedBox(width: 5),
-                        IconButton(
-                          onPressed: _isSending ? null : _pickAndSendImage,
-                          tooltip: 'Adjuntar imagen',
-                          style: IconButton.styleFrom(
-                            foregroundColor: const Color(0xFF173B75),
-                          ),
-                          icon: const Icon(Icons.image_outlined),
-                        ),
-                        const SizedBox(width: 2),
-                        IconButton.filled(
+                      ),
+                      const SizedBox(width: 9),
+                      SizedBox(
+                        width: 50,
+                        height: 50,
+                        child: IconButton.filled(
                           onPressed: _isSending ? null : _sendMessage,
+                          tooltip: 'Enviar mensaje',
                           style: IconButton.styleFrom(
                             backgroundColor: const Color(0xFF2457C5),
                             foregroundColor: Colors.white,
+                            disabledBackgroundColor: const Color(0xFFB7C8D5),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18),
+                            ),
                           ),
-                          icon: const Icon(Icons.send_rounded),
+                          icon: const Icon(Icons.send_rounded, size: 21),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ],
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChatHintChip extends StatelessWidget {
+  const _ChatHintChip({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0F6FA),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFDCE8EF)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: const Color(0xFF087F8C)),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: const Color(0xFF496578),
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],
@@ -515,6 +764,22 @@ class _TextMessageBubble extends StatelessWidget {
     final foregroundColor = isMine ? Colors.white : const Color(0xFF173B75);
 
     final imageUrl = message.imageUrl?.trim();
+    final imageBase64 = message.imageBase64?.trim();
+    Uint8List? imageBytes;
+    if (imageBase64 != null && imageBase64.isNotEmpty) {
+      try {
+        imageBytes = base64Decode(imageBase64);
+      } on FormatException catch (error) {
+        debugPrint(
+          'El comprobante del mensaje ${message.id} no es Base64 válido: $error',
+        );
+      }
+    }
+    final ImageProvider<Object>? imageProvider = imageBytes != null
+        ? MemoryImage(imageBytes)
+        : imageUrl != null && imageUrl.isNotEmpty
+        ? NetworkImage(imageUrl)
+        : null;
     final bubble = Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -557,14 +822,14 @@ class _TextMessageBubble extends StatelessWidget {
                   : const Color(0xFF087F8C),
             ),
           ),
-          if (imageUrl != null && imageUrl.isNotEmpty) ...[
+          if (imageProvider != null) ...[
             const SizedBox(height: 6),
             GestureDetector(
-              onTap: () => _previewImage(context, imageUrl),
+              onTap: () => _previewImage(context, imageProvider),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(10),
-                child: Image.network(
-                  imageUrl,
+                child: Image(
+                  image: imageProvider,
                   width: math.min(
                     280.0,
                     MediaQuery.sizeOf(context).width * 0.62,
@@ -593,8 +858,7 @@ class _TextMessageBubble extends StatelessWidget {
             ),
           ],
           if (message.text?.trim().isNotEmpty == true) ...[
-            if (imageUrl != null && imageUrl.isNotEmpty)
-              const SizedBox(height: 6),
+            if (imageProvider != null) const SizedBox(height: 6),
             Text(
               message.text!,
               style: theme.textTheme.bodyLarge?.copyWith(
@@ -643,31 +907,36 @@ class _TextMessageBubble extends StatelessWidget {
     );
   }
 
-  void _previewImage(BuildContext context, String imageUrl) {
+  void _previewImage(
+    BuildContext context,
+    ImageProvider<Object> imageProvider,
+  ) {
     showDialog<void>(
       context: context,
-      builder: (context) => Dialog(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: MediaQuery.sizeOf(context).width * 0.9,
-            maxHeight: MediaQuery.sizeOf(context).height * 0.8,
+      builder: (context) => Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(
+          backgroundColor: Colors.black,
+          foregroundColor: Colors.white,
+          title: const Text('Comprobante de pago'),
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.of(context).pop(),
           ),
-          child: InteractiveViewer(
-            child: Image.network(
-              imageUrl,
-              fit: BoxFit.contain,
-              loadingBuilder: (context, child, progress) {
-                if (progress == null) return child;
-                return const SizedBox(
-                  height: 300,
-                  child: Center(
-                    child: CircularProgressIndicator(color: Color(0xFF2457C5)),
-                  ),
-                );
-              },
-              errorBuilder: (context, error, stackTrace) => const SizedBox(
-                height: 300,
-                child: Center(child: Icon(Icons.broken_image_outlined)),
+        ),
+        body: SafeArea(
+          child: Center(
+            child: InteractiveViewer(
+              minScale: 0.8,
+              maxScale: 5,
+              child: Image(
+                image: imageProvider,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) => const Icon(
+                  Icons.broken_image_outlined,
+                  color: Colors.white,
+                  size: 48,
+                ),
               ),
             ),
           ),

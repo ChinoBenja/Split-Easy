@@ -459,8 +459,8 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                               Row(
                                 children: [
                                   Container(
-                                    width: 38,
-                                    height: 38,
+                                    width: 42,
+                                    height: 42,
                                     decoration: BoxDecoration(
                                       gradient: const LinearGradient(
                                         colors: [
@@ -468,7 +468,16 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                                           Color(0xFF087F8C),
                                         ],
                                       ),
-                                      borderRadius: BorderRadius.circular(13),
+                                      borderRadius: BorderRadius.circular(15),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: const Color(
+                                            0xFF087F8C,
+                                          ).withValues(alpha: 0.16),
+                                          blurRadius: 9,
+                                          offset: const Offset(0, 4),
+                                        ),
+                                      ],
                                     ),
                                     child: const Icon(
                                       Icons.people_alt_rounded,
@@ -479,43 +488,23 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                                   const SizedBox(width: 10),
                                   Expanded(
                                     child: Text(
-                                      'Invita a tu grupo',
+                                      'Arma tu equipo',
                                       style: theme.textTheme.titleMedium
                                           ?.copyWith(
-                                            fontWeight: FontWeight.w700,
+                                            fontWeight: FontWeight.w800,
                                             color: const Color(0xFF173B75),
                                           ),
                                     ),
                                   ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 6,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(
-                                        color: const Color(0xFFD2E7EF),
-                                      ),
-                                    ),
-                                    child: Text(
-                                      '${_members.length}',
-                                      style: theme.textTheme.labelMedium
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.w700,
-                                            color: const Color(0xFF176B87),
-                                          ),
-                                    ),
-                                  ),
+                                  _MemberCountBadge(count: _members.length),
                                 ],
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                'Agrega personas por correo. Recibirán una invitación para unirse.',
+                                'Agrega personas por correo para compartir gastos e invitarlas a participar.',
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: const Color(0xFF526879),
-                                  height: 1.35,
+                                  height: 1.4,
                                 ),
                               ),
                               const SizedBox(height: 14),
@@ -538,47 +527,107 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                                   ),
                                   const SizedBox(width: 10),
                                   SizedBox(
-                                    width: 52,
-                                    height: 52,
-                                    child: IconButton.filled(
-                                      tooltip: 'Invitar integrante',
-                                      onPressed: _isAddingMember
-                                          ? null
-                                          : _addMemberByEmail,
-                                      style: IconButton.styleFrom(
-                                        shape: const CircleBorder(),
-                                        backgroundColor: const Color(
-                                          0xFF2457C5,
+                                    width: 54,
+                                    height: 54,
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        gradient: const LinearGradient(
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                          colors: [
+                                            Color(0xFF2457C5),
+                                            Color(0xFF087F8C),
+                                          ],
                                         ),
-                                        foregroundColor: Colors.white,
+                                        shape: BoxShape.circle,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: const Color(
+                                              0xFF176B87,
+                                            ).withValues(alpha: 0.2),
+                                            blurRadius: 10,
+                                            offset: const Offset(0, 4),
+                                          ),
+                                        ],
                                       ),
-                                      icon: _isAddingMember
-                                          ? const SizedBox(
-                                              width: 20,
-                                              height: 20,
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                                color: Colors.white,
+                                      child: IconButton(
+                                        tooltip: 'Invitar integrante',
+                                        onPressed: _isAddingMember
+                                            ? null
+                                            : _addMemberByEmail,
+                                        style: IconButton.styleFrom(
+                                          shape: const CircleBorder(),
+                                          foregroundColor: Colors.white,
+                                        ),
+                                        icon: _isAddingMember
+                                            ? const SizedBox(
+                                                width: 20,
+                                                height: 20,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                      color: Colors.white,
+                                                    ),
+                                              )
+                                            : const Icon(
+                                                Icons.person_add_alt_1_rounded,
                                               ),
-                                            )
-                                          : const Icon(Icons.add_rounded),
+                                      ),
                                     ),
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 13),
+                              const SizedBox(height: 18),
+                              Row(
+                                children: [
+                                  Text(
+                                    'INTEGRANTES DEL GRUPO',
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: const Color(0xFF687C8D),
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.65,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Container(
+                                      height: 1,
+                                      color: const Color(0xFFD2E7EF),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
                               if (_members.isEmpty)
                                 Container(
-                                  padding: const EdgeInsets.all(11),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 16,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: Colors.white.withValues(alpha: 0.8),
                                     borderRadius: BorderRadius.circular(14),
-                                  ),
-                                  child: Text(
-                                    'Añade a las personas con las que compartirás gastos.',
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color: const Color(0xFF687C8D),
+                                    border: Border.all(
+                                      color: const Color(0xFFDCE8EF),
                                     ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.person_search_rounded,
+                                        color: Color(0xFF7C9AAA),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          'Aquí aparecerán las personas que invites.',
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(
+                                                color: const Color(0xFF687C8D),
+                                              ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 )
                               else
@@ -649,6 +698,45 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _MemberCountBadge extends StatelessWidget {
+  const _MemberCountBadge({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFD2E7EF)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF173B75).withValues(alpha: 0.06),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.groups_rounded, size: 15, color: Color(0xFF087F8C)),
+          const SizedBox(width: 5),
+          Text(
+            '$count',
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: const Color(0xFF176B87),
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -765,15 +853,22 @@ class _CreateGroupHero extends StatelessWidget {
         : 'data:$photoContentType;base64,${base64Encode(photoBytes!)}';
 
     return Container(
-      height: 190,
+      height: 186,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF2457C5), Color(0xFF087F8C)],
+          colors: [Color(0xFF2457C5), Color(0xFF087F8C), Color(0xFF20A6A7)],
         ),
         borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF176B87).withValues(alpha: 0.2),
+            blurRadius: 16,
+            offset: const Offset(0, 7),
+          ),
+        ],
       ),
       child: Stack(
         children: [
@@ -801,9 +896,18 @@ class _CreateGroupHero extends StatelessWidget {
               ),
             ),
           ),
-          Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+          Positioned(
+            right: -14,
+            bottom: -18,
+            child: Icon(
+              Icons.groups_rounded,
+              size: 130,
+              color: Colors.white.withValues(alpha: 0.06),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+            child: Row(
               children: [
                 Semantics(
                   button: true,
@@ -816,15 +920,25 @@ class _CreateGroupHero extends StatelessWidget {
                       clipBehavior: Clip.none,
                       children: [
                         Container(
-                          width: 76,
-                          height: 76,
+                          width: 82,
+                          height: 82,
                           padding: const EdgeInsets.all(3),
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
+                            color: Colors.white.withValues(alpha: 0.15),
                             border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.85),
+                              color: Colors.white.withValues(alpha: 0.8),
                               width: 2,
                             ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(
+                                  0xFF12345B,
+                                ).withValues(alpha: 0.15),
+                                blurRadius: 12,
+                                offset: const Offset(0, 5),
+                              ),
+                            ],
                           ),
                           child: ClipOval(
                             child: photoSource == null
@@ -833,7 +947,7 @@ class _CreateGroupHero extends StatelessWidget {
                                     child: const Icon(
                                       Icons.groups_rounded,
                                       color: Colors.white,
-                                      size: 38,
+                                      size: 40,
                                     ),
                                   )
                                 : ProfilePhotoImage(
@@ -845,18 +959,18 @@ class _CreateGroupHero extends StatelessWidget {
                                       child: const Icon(
                                         Icons.groups_rounded,
                                         color: Colors.white,
-                                        size: 38,
+                                        size: 40,
                                       ),
                                     ),
                                   ),
                           ),
                         ),
                         Positioned(
-                          right: -2,
-                          bottom: -1,
+                          right: -1,
+                          bottom: 0,
                           child: Container(
-                            width: 28,
-                            height: 28,
+                            width: 29,
+                            height: 29,
                             decoration: BoxDecoration(
                               color: Colors.white,
                               shape: BoxShape.circle,
@@ -883,21 +997,93 @@ class _CreateGroupHero extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 11),
-                Text(
-                  'Crea tu espacio compartido',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  'Organiza planes y gastos en equipo',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: Colors.white.withValues(alpha: 0.88),
+                const SizedBox(width: 17),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.16),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.18),
+                          ),
+                        ),
+                        child: Text(
+                          'TU PRÓXIMO PLAN',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: Colors.white.withValues(alpha: 0.94),
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.75,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        'Crea tu espacio compartido',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          height: 1.05,
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Añade una foto y organiza gastos en equipo.',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          height: 1.3,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      InkWell(
+                        onTap: onSelectPhoto,
+                        borderRadius: BorderRadius.circular(16),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 2,
+                            vertical: 2,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                photoSource == null
+                                    ? Icons.add_a_photo_outlined
+                                    : Icons.edit_rounded,
+                                size: 15,
+                                color: const Color(0xFFB4F0FF),
+                              ),
+                              const SizedBox(width: 5),
+                              Flexible(
+                                child: Text(
+                                  photoSource == null
+                                      ? 'Añadir foto del grupo'
+                                      : 'Cambiar foto',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: const Color(0xFFB4F0FF),
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],

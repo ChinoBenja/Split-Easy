@@ -12,6 +12,8 @@ import '../models/balance_model.dart';
 import '../models/history_entry_model.dart';
 
 class FirestoreService {
+  static const int maxChatImageBase64Length = 700 * 1024;
+
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   CollectionReference get _usersRef => _db.collection('users');
@@ -1042,6 +1044,41 @@ class FirestoreService {
     if (imageUrl != null && imageUrl.trim().isNotEmpty) {
       message['imageUrl'] = imageUrl.trim();
     }
+    if (senderPhotoUrl != null && senderPhotoUrl.trim().isNotEmpty) {
+      message['senderPhotoUrl'] = senderPhotoUrl.trim();
+    }
+    await _messagesRef(groupId).add(message);
+  }
+
+  Future<void> sendImageMessage({
+    required String groupId,
+    required String senderId,
+    required String senderName,
+    required String imageBase64,
+    required String imageContentType,
+    String? text,
+    String? senderPhotoUrl,
+  }) async {
+    if (imageBase64.length > maxChatImageBase64Length) {
+      throw ArgumentError(
+        'El comprobante supera el límite de 700 KB. '
+        'Recórtalo o selecciona una imagen más liviana.',
+      );
+    }
+    if (!imageContentType.startsWith('image/')) {
+      throw ArgumentError.value(imageContentType, 'imageContentType');
+    }
+
+    final message = <String, dynamic>{
+      'type': 'text',
+      'senderId': senderId,
+      'senderName': senderName,
+      'imageBase64': imageBase64,
+      'imageContentType': imageContentType,
+      'timestamp': FieldValue.serverTimestamp(),
+      'createdAt': Timestamp.now(),
+    };
+    if (text != null && text.trim().isNotEmpty) message['text'] = text.trim();
     if (senderPhotoUrl != null && senderPhotoUrl.trim().isNotEmpty) {
       message['senderPhotoUrl'] = senderPhotoUrl.trim();
     }

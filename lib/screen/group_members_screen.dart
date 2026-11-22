@@ -1,9 +1,15 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../models/group_model.dart';
 import '../../models/user_profile_model.dart';
 import '../../services/firestore_service.dart';
+import '../widgets/main_navigation_bar.dart';
 import '../widgets/person_avatar.dart';
 import '../widgets/profile_photo_image.dart';
+import 'add_expense_screen.dart';
+import 'assistant_chat_screen.dart';
+import 'create_group_screen.dart';
+import 'profile_screen.dart';
 
 class GroupMembersScreen extends StatefulWidget {
   const GroupMembersScreen({super.key, required this.group});
@@ -17,11 +23,16 @@ class GroupMembersScreen extends StatefulWidget {
 class _GroupMembersScreenState extends State<GroupMembersScreen> {
   final _firestoreService = FirestoreService();
   late Future<Map<String, UserProfile>> _profilesFuture;
+  Future<String?>? _userPhotoFuture;
 
   @override
   void initState() {
     super.initState();
     _loadProfiles();
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      _userPhotoFuture = _firestoreService.getUserPhoto(uid);
+    }
   }
 
   void _loadProfiles() {
@@ -197,7 +208,41 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
           ),
         ),
       ),
+      bottomNavigationBar: MainNavigationBar(
+        onHomeTap: () =>
+            Navigator.of(context).popUntil((route) => route.isFirst),
+        onGroupsTap: _openGroups,
+        onAssistantTap: () => _navigateTo(const AssistantChatScreen()),
+        onCreateGroupTap: () => _navigateTo(const CreateGroupScreen()),
+        onAddExpenseTap: () =>
+            _navigateTo(AddExpenseScreen(group: widget.group)),
+        onProfileTap: _openProfile,
+        profilePhotoFuture: _userPhotoFuture ?? Future<String?>.value(null),
+      ),
     );
+  }
+
+  Future<void> _openGroups() async {
+    final navigator = Navigator.of(context);
+    await navigator.maybePop();
+    if (navigator.canPop()) await navigator.maybePop();
+  }
+
+  Future<void> _openProfile() async {
+    await _navigateTo(const ProfileScreen());
+    if (!mounted) return;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      setState(() {
+        _userPhotoFuture = _firestoreService.getUserPhoto(uid);
+      });
+    }
+  }
+
+  Future<void> _navigateTo(Widget screen) {
+    return Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => screen));
   }
 }
 

@@ -105,8 +105,18 @@ service cloud.firestore {
     }
 
     match /groups/{groupId}/messages/{messageId} {
+      function hasValidImageData() {
+        return !request.resource.data.keys().hasAny(['imageBase64'])
+          || (
+            request.resource.data.imageBase64 is string
+            && request.resource.data.imageBase64.size() <= 716800
+            && request.resource.data.imageContentType is string
+            && request.resource.data.imageContentType.matches('image/.*')
+          );
+      }
+
       allow get, list: if isSignedIn();
-      allow create: if isSignedIn();
+      allow create: if isSignedIn() && hasValidImageData();
       allow update: if false;
       allow delete: if isSignedIn();
     }
