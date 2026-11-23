@@ -1,11 +1,11 @@
 {
-    "name": "split_easy",
-    "short_name": "split_easy",
+    "name": "Split Easy",
+    "short_name": "Split Easy",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Divide gastos compartidos y liquida cuentas fácilmente.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

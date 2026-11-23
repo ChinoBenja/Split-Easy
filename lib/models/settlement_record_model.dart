@@ -12,6 +12,7 @@ class SettlementRecord {
     required this.createdByName,
     required this.createdAt,
     required this.hasReceipt,
+    this.expenseId,
     this.note,
   });
 
@@ -25,6 +26,7 @@ class SettlementRecord {
   final String createdByName;
   final DateTime createdAt;
   final bool hasReceipt;
+  final String? expenseId;
   final String? note;
 
   factory SettlementRecord.fromFirestore(DocumentSnapshot doc) {
@@ -46,6 +48,7 @@ class SettlementRecord {
       ),
       createdAt: createdAt is Timestamp ? createdAt.toDate() : DateTime.now(),
       hasReceipt: data['hasReceipt'] == true,
+      expenseId: _optionalString(data['expenseId']),
       note: _optionalString(data['note']),
     );
   }

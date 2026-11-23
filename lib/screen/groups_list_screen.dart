@@ -5,12 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../models/expense_model.dart';
 import '../../models/group_model.dart';
+import '../../models/settlement_record_model.dart';
 import '../../services/firestore_service.dart';
 import 'assistant_chat_screen.dart';
 import 'add_expense_screen.dart';
 import 'create_group_screen.dart';
 import 'group_detail_screen.dart';
 import 'profile_screen.dart';
+import 'secret_games_screen.dart';
 import 'settings_screen.dart';
 import '../widgets/profile_photo_image.dart';
 import '../widgets/main_navigation_bar.dart';
@@ -163,8 +165,7 @@ class _GroupsListScreenState extends State<GroupsListScreen> {
       MaterialPageRoute<void>(
         builder: (_) => _GroupsGridScreen(
           groups: _currentGroups,
-          balances: const {},
-          groupErrors: const {},
+          uid: uid,
           currencyFormat: NumberFormat.currency(
             locale: 'es_CL',
             symbol: '\$',
@@ -355,8 +356,7 @@ class _RecentActivityPlaceholder extends StatelessWidget {
 class _GroupsGridScreen extends StatefulWidget {
   const _GroupsGridScreen({
     required this.groups,
-    required this.balances,
-    required this.groupErrors,
+    required this.uid,
     required this.currencyFormat,
     required this.onCreateGroup,
     required this.onHomeTap,
@@ -368,8 +368,7 @@ class _GroupsGridScreen extends StatefulWidget {
   });
 
   final List<GroupModel> groups;
-  final Map<String, double?> balances;
-  final Set<String> groupErrors;
+  final String uid;
   final NumberFormat currencyFormat;
   final VoidCallback onCreateGroup;
   final VoidCallback onHomeTap;
@@ -384,8 +383,34 @@ class _GroupsGridScreen extends StatefulWidget {
 }
 
 class _GroupsGridScreenState extends State<_GroupsGridScreen> {
+  final _firestoreService = FirestoreService();
   final _searchController = TextEditingController();
+  final Map<String, Stream<List<ExpenseModel>>> _balanceStreams = {};
+  final Map<String, Stream<List<SettlementRecord>>> _settlementStreams = {};
   String _query = '';
+
+  Stream<List<ExpenseModel>> _balanceStreamFor(String groupId) {
+    return _balanceStreams.putIfAbsent(
+      groupId,
+      () => _firestoreService.watchGroupExpenses(groupId),
+    );
+  }
+
+  Stream<List<SettlementRecord>> _settlementStreamFor(String groupId) {
+    return _settlementStreams.putIfAbsent(
+      groupId,
+      () => _firestoreService.watchGroupSettlements(groupId),
+    );
+  }
+
+  void _retryBalance(String groupId) {
+    setState(() {
+      _balanceStreams[groupId] = _firestoreService.watchGroupExpenses(groupId);
+      _settlementStreams[groupId] = _firestoreService.watchGroupSettlements(
+        groupId,
+      );
+    });
+  }
 
   @override
   void dispose() {
@@ -396,6 +421,18 @@ class _GroupsGridScreenState extends State<_GroupsGridScreen> {
   void _createGroup() {
     Navigator.of(context).pop();
     widget.onCreateGroup();
+  }
+
+  void _submitSearch(String value) {
+    if (value.trim().toLowerCase() == 'mygames') {
+      _searchController.clear();
+      setState(() => _query = '');
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(builder: (_) => const SecretGamesScreen()),
+      );
+      return;
+    }
+    setState(() => _query = value);
   }
 
   @override
@@ -416,25 +453,25 @@ class _GroupsGridScreenState extends State<_GroupsGridScreen> {
       ),
       body: Column(
         children: [
-          if (widget.groups.length > 2)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-              child: TextField(
-                controller: _searchController,
-                onChanged: (value) => setState(() => _query = value),
-                textInputAction: TextInputAction.search,
-                decoration: InputDecoration(
-                  hintText: 'Buscar grupo',
-                  prefixIcon: const Icon(Icons.search_rounded),
-                  filled: true,
-                  fillColor: Colors.white,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide.none,
-                  ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+            child: TextField(
+              controller: _searchController,
+              onChanged: (value) => setState(() => _query = value),
+              onSubmitted: _submitSearch,
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                hintText: 'Buscar grupo',
+                prefixIcon: const Icon(Icons.search_rounded),
+                filled: true,
+                fillColor: Colors.white,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none,
                 ),
               ),
             ),
+          ),
           Expanded(
             child: groups.isEmpty
                 ? widget.groups.isEmpty
@@ -466,13 +503,15 @@ class _GroupsGridScreenState extends State<_GroupsGridScreen> {
                         itemBuilder: (context, index) {
                           final group = groups[index];
                           return _GroupGridCard(
+                            key: ValueKey(group.id),
                             group: group,
-                            balance: widget.balances[group.id],
-                            hasBalanceError: widget.groupErrors.contains(
-                              group.id,
-                            ),
+                            uid: widget.uid,
+                            balanceStream: _balanceStreamFor(group.id),
+                            settlementStream: _settlementStreamFor(group.id),
+                            firestoreService: _firestoreService,
                             currencyFormat: widget.currencyFormat,
                             onTap: () => widget.onGroupTap(group),
+                            onRetry: () => _retryBalance(group.id),
                           );
                         },
                       );
@@ -496,33 +535,74 @@ class _GroupsGridScreenState extends State<_GroupsGridScreen> {
 
 class _GroupGridCard extends StatelessWidget {
   const _GroupGridCard({
+    super.key,
     required this.group,
-    required this.balance,
-    required this.hasBalanceError,
+    required this.uid,
+    required this.balanceStream,
+    required this.settlementStream,
+    required this.firestoreService,
     required this.currencyFormat,
     required this.onTap,
+    required this.onRetry,
   });
 
   final GroupModel group;
-  final double? balance;
-  final bool hasBalanceError;
+  final String uid;
+  final Stream<List<ExpenseModel>> balanceStream;
+  final Stream<List<SettlementRecord>> settlementStream;
+  final FirestoreService firestoreService;
   final NumberFormat currencyFormat;
   final VoidCallback onTap;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
+    return StreamBuilder<List<ExpenseModel>>(
+      stream: balanceStream,
+      builder: (context, expenseSnapshot) {
+        return StreamBuilder<List<SettlementRecord>>(
+          stream: settlementStream,
+          builder: (context, settlementSnapshot) {
+            double? balance;
+            if (expenseSnapshot.hasData && settlementSnapshot.hasData) {
+              for (final memberBalance in firestoreService.calculateBalances(
+                group: group,
+                expenses: expenseSnapshot.data!,
+                settlements: settlementSnapshot.data!,
+              )) {
+                if (memberBalance.uid == uid) {
+                  balance = memberBalance.balance;
+                  break;
+                }
+              }
+              balance ??= 0;
+            }
+            final hasBalanceError =
+                expenseSnapshot.hasError || settlementSnapshot.hasError;
+            final balanceText = hasBalanceError
+                ? 'Balance no disponible'
+                : balance == null
+                ? 'Calculando balance…'
+                : balance > 0.01
+                ? 'Te deben ${currencyFormat.format(balance)}'
+                : balance < -0.01
+                ? 'Debes ${currencyFormat.format(balance.abs())}'
+                : 'Al día';
+            return _buildCard(context, balanceText, hasBalanceError);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildCard(
+    BuildContext context,
+    String balanceText,
+    bool hasBalanceError,
+  ) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final accent = _colorForGroup(group.name);
-    final balanceText = hasBalanceError
-        ? 'Balance no disponible'
-        : balance == null
-        ? 'Calculando balance'
-        : balance! > 0.01
-        ? 'Te deben ${currencyFormat.format(balance!)}'
-        : balance! < -0.01
-        ? 'Debes ${currencyFormat.format(balance!.abs())}'
-        : 'Al día';
     final initials = _initialsFor(group.name);
 
     return Card(
@@ -606,14 +686,36 @@ class _GroupGridCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 5),
-              Text(
-                balanceText,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: hasBalanceError ? colors.error : accent,
-                  fontWeight: FontWeight.w700,
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      balanceText,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: hasBalanceError ? colors.error : accent,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  if (hasBalanceError)
+                    IconButton(
+                      tooltip: 'Reintentar balance',
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 28,
+                        height: 28,
+                      ),
+                      onPressed: onRetry,
+                      icon: Icon(
+                        Icons.refresh_rounded,
+                        size: 18,
+                        color: colors.error,
+                      ),
+                    ),
+                ],
               ),
             ],
           ),
@@ -742,9 +844,12 @@ class _GroupsDashboardState extends State<_GroupsDashboard> {
   final _firestoreService = FirestoreService();
   final _activitySheetController = DraggableScrollableController();
   final Map<String, StreamSubscription<List<ExpenseModel>>> _subscriptions = {};
+  final Map<String, StreamSubscription<List<SettlementRecord>>>
+  _settlementSubscriptions = {};
   final Map<String, double?> _groupBalances = {};
   final Map<String, Object> _groupErrors = {};
   final Map<String, List<ExpenseModel>> _latestExpenses = {};
+  final Map<String, List<SettlementRecord>> _latestSettlements = {};
   late final NumberFormat _currencyFormat = NumberFormat.currency(
     locale: 'es_CL',
     symbol: '\$',
@@ -770,6 +875,9 @@ class _GroupsDashboardState extends State<_GroupsDashboard> {
     for (final subscription in _subscriptions.values) {
       subscription.cancel();
     }
+    for (final subscription in _settlementSubscriptions.values) {
+      subscription.cancel();
+    }
     _activitySheetController.dispose();
     super.dispose();
   }
@@ -779,17 +887,24 @@ class _GroupsDashboardState extends State<_GroupsDashboard> {
     for (final groupId in _subscriptions.keys.toList()) {
       if (!currentIds.contains(groupId)) {
         _subscriptions.remove(groupId)?.cancel();
+        _settlementSubscriptions.remove(groupId)?.cancel();
         _groupBalances.remove(groupId);
         _groupErrors.remove(groupId);
         _latestExpenses.remove(groupId);
+        _latestSettlements.remove(groupId);
       }
     }
 
     for (final group in widget.groups) {
       if (_subscriptions.containsKey(group.id)) {
         final expenses = _latestExpenses[group.id];
-        if (expenses != null) {
-          _groupBalances[group.id] = _calculateUserBalance(group.id, expenses);
+        final settlements = _latestSettlements[group.id];
+        if (expenses != null && settlements != null) {
+          _groupBalances[group.id] = _calculateUserBalance(
+            group.id,
+            expenses,
+            settlements,
+          );
         }
         continue;
       }
@@ -799,32 +914,65 @@ class _GroupsDashboardState extends State<_GroupsDashboard> {
           .listen(
             (expenses) {
               if (!widget.groups.any((item) => item.id == group.id)) return;
-              final balance = _calculateUserBalance(group.id, expenses);
-              if (!mounted) return;
-              setState(() {
-                _latestExpenses[group.id] = expenses;
-                _groupBalances[group.id] = balance;
-                _groupErrors.remove(group.id);
-              });
+              _latestExpenses[group.id] = expenses;
+              _updateGroupBalance(group.id);
             },
-            onError: (Object error) {
+            onError: (Object error) =>
+                _setGroupBalanceError(group.id, error, expenseStream: true),
+          );
+      _settlementSubscriptions[group.id] = _firestoreService
+          .watchGroupSettlements(group.id)
+          .listen(
+            (settlements) {
               if (!widget.groups.any((item) => item.id == group.id)) return;
-              if (!mounted) return;
-              setState(() {
-                _groupErrors[group.id] = error;
-                _groupBalances[group.id] = null;
-              });
+              _latestSettlements[group.id] = settlements;
+              _updateGroupBalance(group.id);
             },
+            onError: (Object error) =>
+                _setGroupBalanceError(group.id, error, expenseStream: false),
           );
     }
     if (mounted) setState(() {});
   }
 
-  double _calculateUserBalance(String groupId, List<ExpenseModel> expenses) {
+  void _updateGroupBalance(String groupId) {
+    final expenses = _latestExpenses[groupId];
+    final settlements = _latestSettlements[groupId];
+    if (expenses == null || settlements == null || !mounted) return;
+    final balance = _calculateUserBalance(groupId, expenses, settlements);
+    setState(() {
+      _groupBalances[groupId] = balance;
+      _groupErrors.remove(groupId);
+    });
+  }
+
+  void _setGroupBalanceError(
+    String groupId,
+    Object error, {
+    required bool expenseStream,
+  }) {
+    if (!widget.groups.any((item) => item.id == groupId) || !mounted) return;
+    if (expenseStream) {
+      _latestExpenses.remove(groupId);
+    } else {
+      _latestSettlements.remove(groupId);
+    }
+    setState(() {
+      _groupErrors[groupId] = error;
+      _groupBalances[groupId] = null;
+    });
+  }
+
+  double _calculateUserBalance(
+    String groupId,
+    List<ExpenseModel> expenses,
+    List<SettlementRecord> settlements,
+  ) {
     final group = widget.groups.firstWhere((item) => item.id == groupId);
     for (final balance in _firestoreService.calculateBalances(
       group: group,
       expenses: expenses,
+      settlements: settlements,
     )) {
       if (balance.uid == widget.uid) return balance.balance;
     }
@@ -846,8 +994,7 @@ class _GroupsDashboardState extends State<_GroupsDashboard> {
       MaterialPageRoute<void>(
         builder: (_) => _GroupsGridScreen(
           groups: widget.groups,
-          balances: Map.unmodifiable(_groupBalances),
-          groupErrors: Set.unmodifiable(_groupErrors.keys),
+          uid: widget.uid,
           currencyFormat: _currencyFormat,
           onCreateGroup: widget.onCreateGroup,
           onHomeTap: widget.onHomeTap,
@@ -1345,12 +1492,15 @@ class _FinancialSummaryCard extends StatelessWidget {
         ? 'Te deben'
         : negative
         ? 'Debes'
-        : 'Balance neto';
+        : 'Estado';
+    final hasPendingBalance = positive || negative;
     final balanceValue = isLoading
         ? 'Calculando…'
         : hasError
         ? 'No disponible'
-        : currencyFormat.format(balance.abs());
+        : hasPendingBalance
+        ? currencyFormat.format(balance.abs())
+        : 'Al día';
 
     return Container(
       padding: const EdgeInsets.all(22),
@@ -1420,7 +1570,9 @@ class _FinancialSummaryCard extends StatelessWidget {
             value: balanceValue,
             detail: hasError
                 ? 'No fue posible actualizar todos los balances'
-                : 'Balance neto combinado de tus grupos',
+                : hasPendingBalance
+                ? 'Balance neto combinado de tus grupos'
+                : 'No tienes deudas pendientes',
             textColor: balanceColor,
             mutedColor: Colors.white.withValues(alpha: 0.72),
             valueStyle: theme.textTheme.headlineSmall?.copyWith(

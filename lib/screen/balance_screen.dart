@@ -116,6 +116,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
               final suggestedSettlements = _firestoreService.simplifyDebts(
                 balances,
               );
+              final currentUid = FirebaseAuth.instance.currentUser?.uid;
 
               if (expenses.isEmpty) {
                 return _BalanceMessage(
@@ -187,7 +188,11 @@ class _BalanceScreenState extends State<BalanceScreen> {
                               settlement: settlement,
                               currencyFormat: _currencyFormat,
                               memberPhotoUrls: _memberPhotoUrls,
-                              onRegisterPayment: _isRegisteringSettlement
+                              showRegisterPayment:
+                                  settlement.fromUid == currentUid,
+                              onRegisterPayment:
+                                  _isRegisteringSettlement ||
+                                      settlement.fromUid != currentUid
                                   ? null
                                   : () => _registerSettlement(settlement),
                             ),
@@ -912,12 +917,14 @@ class _SettlementTile extends StatelessWidget {
     required this.currencyFormat,
     required this.memberPhotoUrls,
     required this.onRegisterPayment,
+    required this.showRegisterPayment,
   });
 
   final SettlementTransaction settlement;
   final NumberFormat currencyFormat;
   final Future<Map<String, String>> memberPhotoUrls;
   final VoidCallback? onRegisterPayment;
+  final bool showRegisterPayment;
 
   @override
   Widget build(BuildContext context) {
@@ -1092,33 +1099,35 @@ class _SettlementTile extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(height: 11),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: onRegisterPayment,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF2457C5),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+              if (showRegisterPayment) ...[
+                const SizedBox(height: 11),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: onRegisterPayment,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF2457C5),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    icon: const Icon(Icons.receipt_long_rounded, size: 18),
+                    label: const Text('Registrar pago o abono'),
+                  ),
+                ),
+                const SizedBox(height: 7),
+                Center(
+                  child: Text(
+                    'Solo queda constancia; no se transfiere dinero desde la app.',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: const Color(0xFF8093A1),
                     ),
                   ),
-                  icon: const Icon(Icons.receipt_long_rounded, size: 18),
-                  label: const Text('Registrar pago o abono'),
                 ),
-              ),
-              const SizedBox(height: 7),
-              Center(
-                child: Text(
-                  'Solo queda constancia; no se transfiere dinero desde la app.',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: const Color(0xFF8093A1),
-                  ),
-                ),
-              ),
+              ],
             ],
           ),
         );

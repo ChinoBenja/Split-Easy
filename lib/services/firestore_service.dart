@@ -11,10 +11,12 @@ import '../models/message_model.dart';
 import '../models/balance_model.dart';
 import '../models/history_entry_model.dart';
 import '../models/settlement_record_model.dart';
+import '../utils/stream_timeout.dart';
 
 class FirestoreService {
   static const int maxChatImageBase64Length = 700 * 1024;
   static const int maxSettlementNoteLength = 500;
+  static const Duration _initialWatchTimeout = Duration(seconds: 20);
 
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
@@ -180,7 +182,8 @@ class FirestoreService {
         .map(
           (snap) =>
               snap.docs.map((doc) => GroupModel.fromFirestore(doc)).toList(),
-        );
+        )
+        .withInitialTimeout(_initialWatchTimeout, operation: 'tus grupos');
   }
 
   Stream<List<GroupModel>> watchPendingInvitations(String uid) {
@@ -202,7 +205,11 @@ class FirestoreService {
               .toList();
           groups.sort((a, b) => b.createdAt.compareTo(a.createdAt));
           return groups;
-        });
+        })
+        .withInitialTimeout(
+          _initialWatchTimeout,
+          operation: 'las invitaciones',
+        );
   }
 
   Future<String> createGroup({
@@ -305,6 +312,10 @@ class FirestoreService {
           (snapshot) => snapshot.exists
               ? GroupDeletionProposal.fromFirestore(snapshot)
               : null,
+        )
+        .withInitialTimeout(
+          _initialWatchTimeout,
+          operation: 'la votación del grupo',
         );
   }
 
@@ -589,6 +600,10 @@ class FirestoreService {
         .map(
           (snap) =>
               snap.docs.map((doc) => ExpenseModel.fromFirestore(doc)).toList(),
+        )
+        .withInitialTimeout(
+          _initialWatchTimeout,
+          operation: 'los gastos del grupo',
         );
   }
 
@@ -767,6 +782,10 @@ class FirestoreService {
           (snapshot) => snapshot.docs
               .map((doc) => SettlementRecord.fromFirestore(doc))
               .toList(),
+        )
+        .withInitialTimeout(
+          _initialWatchTimeout,
+          operation: 'los pagos registrados',
         );
   }
 
@@ -781,12 +800,14 @@ class FirestoreService {
   }
 
   /// Registra un pago externo como respaldo; no ejecuta transferencias.
+  /// [expenseId] limita la validación y el historial a un gasto específico.
   /// El registro y su entrada de historial se guardan atómicamente.
   Future<void> registerSettlement({
     required String groupId,
     required String fromUid,
     required String toUid,
     required double amount,
+    String? expenseId,
     String? note,
     String? imageBase64,
     String? imageContentType,
@@ -794,6 +815,9 @@ class FirestoreService {
     final currentUid = FirebaseAuth.instance.currentUser?.uid;
     if (currentUid == null || currentUid.isEmpty) {
       throw StateError('Inicia sesión para registrar un pago.');
+    }
+    if (currentUid != fromUid) {
+      throw StateError('Solo quien debe puede registrar este pago.');
     }
     if (fromUid == toUid || amount <= 0 || !amount.isFinite) {
       throw ArgumentError(
@@ -847,10 +871,21 @@ class FirestoreService {
     final existingSettlements = settlementSnapshot.docs
         .map((doc) => SettlementRecord.fromFirestore(doc))
         .toList();
+    final linkedExpense = expenseId == null
+        ? null
+        : expenses.where((expense) => expense.id == expenseId).firstOrNull;
+    if (expenseId != null && linkedExpense == null) {
+      throw StateError('El gasto asociado al pago ya no existe.');
+    }
+    final settlementsForBalance = expenseId == null
+        ? existingSettlements
+        : existingSettlements
+              .where((settlement) => settlement.expenseId == expenseId)
+              .toList();
     final currentBalances = calculateBalances(
       group: group,
-      expenses: expenses,
-      settlements: existingSettlements,
+      expenses: linkedExpense == null ? expenses : [linkedExpense],
+      settlements: settlementsForBalance,
     );
     final currentDebt = simplifyDebts(
       currentBalances,
@@ -883,6 +918,9 @@ class FirestoreService {
       'createdByName': createdByName,
       'createdAt': now,
       'hasReceipt': imageBase64 != null,
+      ...?(expenseId == null
+          ? null
+          : <String, dynamic>{'expenseId': expenseId}),
       ...?(cleanNote != null && cleanNote.isNotEmpty
           ? <String, dynamic>{'note': cleanNote}
           : null),
@@ -900,8 +938,8 @@ class FirestoreService {
       });
     }
     batch.set(historyRef, {
-      'expenseId': '',
-      'expenseDescription': 'pago registrado',
+      'expenseId': expenseId ?? '',
+      'expenseDescription': linkedExpense?.description ?? 'pago registrado',
       'action': 'settlement_recorded',
       'performedBy': currentUid,
       'performedByName': createdByName,
@@ -930,6 +968,10 @@ class FirestoreService {
         .map(
           (snap) =>
               snap.docs.map((d) => ExpenseProposal.fromFirestore(d)).toList(),
+        )
+        .withInitialTimeout(
+          _initialWatchTimeout,
+          operation: 'las propuestas del gasto',
         );
   }
 
@@ -1111,6 +1153,10 @@ class FirestoreService {
         .map(
           (snap) =>
               snap.docs.map((d) => HistoryEntry.fromFirestore(d)).toList(),
+        )
+        .withInitialTimeout(
+          _initialWatchTimeout,
+          operation: 'el historial del grupo',
         );
   }
 
@@ -1144,7 +1190,8 @@ class FirestoreService {
         .snapshots()
         .map(
           (snap) => snap.docs.map((d) => ChatMessage.fromFirestore(d)).toList(),
-        );
+        )
+        .withInitialTimeout(_initialWatchTimeout, operation: 'los mensajes');
   }
 
   /// Escucha mensajes de otros integrantes posteriores a la última lectura.
@@ -1153,31 +1200,38 @@ class FirestoreService {
     required String groupId,
     required String uid,
   }) {
-    return _groupsRef.doc(groupId).snapshots().asyncExpand((groupSnapshot) {
-      if (!groupSnapshot.exists) {
-        return Stream<int>.error(StateError('El grupo ya no existe.'));
-      }
+    return _groupsRef
+        .doc(groupId)
+        .snapshots()
+        .asyncExpand((groupSnapshot) {
+          if (!groupSnapshot.exists) {
+            return Stream<int>.error(StateError('El grupo ya no existe.'));
+          }
 
-      final groupData = groupSnapshot.data() as Map<String, dynamic>;
-      final readStates = groupData['lastReadAt'];
-      final lastReadAt = readStates is Map ? readStates[uid] : null;
-      final cutoff = lastReadAt is Timestamp
-          ? lastReadAt
-          : Timestamp.fromMillisecondsSinceEpoch(0);
+          final groupData = groupSnapshot.data() as Map<String, dynamic>;
+          final readStates = groupData['lastReadAt'];
+          final lastReadAt = readStates is Map ? readStates[uid] : null;
+          final cutoff = lastReadAt is Timestamp
+              ? lastReadAt
+              : Timestamp.fromMillisecondsSinceEpoch(0);
 
-      return _messagesRef(groupId)
-          .where('timestamp', isGreaterThan: cutoff)
-          .snapshots()
-          .map(
-            (messages) => messages.docs.where((document) {
-              final data = document.data() as Map<String, dynamic>;
-              final senderId = data['senderId'];
-              return senderId is String &&
-                  senderId != uid &&
-                  senderId != 'system';
-            }).length,
-          );
-    });
+          return _messagesRef(groupId)
+              .where('timestamp', isGreaterThan: cutoff)
+              .snapshots()
+              .map(
+                (messages) => messages.docs.where((document) {
+                  final data = document.data() as Map<String, dynamic>;
+                  final senderId = data['senderId'];
+                  return senderId is String &&
+                      senderId != uid &&
+                      senderId != 'system';
+                }).length,
+              );
+        })
+        .withInitialTimeout(
+          _initialWatchTimeout,
+          operation: 'el contador de mensajes',
+        );
   }
 
   /// Marca como leídos los mensajes actuales del grupo para [uid].

@@ -1,8 +1,9 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, TargetPlatform;
+    show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/date_symbol_data_local.dart' as intl_local;
 import 'firebase_options.dart';
 import 'login_screen.dart';
@@ -12,10 +13,13 @@ import 'services/notification_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+    await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  }
   await intl_local.initializeDateFormatting('es', null);
   Object? firebaseInitializationError;
   try {
-    if (defaultTargetPlatform == TargetPlatform.android) {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
       await Firebase.initializeApp();
     } else {
       await Firebase.initializeApp(
@@ -27,7 +31,7 @@ Future<void> main() async {
     debugPrintStack(stackTrace: stackTrace);
     firebaseInitializationError = error;
   }
-  if (firebaseInitializationError == null) {
+  if (firebaseInitializationError == null && !kIsWeb) {
     NotificationService.registerBackgroundHandler();
   }
   runApp(
@@ -45,6 +49,50 @@ class SplitEasyApp extends StatelessWidget {
     return MaterialApp(
       title: 'SplitEasy',
       debugShowCheckedModeBanner: false,
+      builder: (context, child) {
+        if (!kIsWeb || child == null) return child ?? const SizedBox.shrink();
+
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final usePhoneFrame = constraints.maxWidth > 600;
+            final frameHeight = constraints.maxHeight > 853
+                ? 853.0
+                : constraints.maxHeight;
+            final frameWidth = usePhoneFrame
+                ? frameHeight * 9 / 16
+                : constraints.maxWidth;
+
+            return ColoredBox(
+              color: usePhoneFrame
+                  ? const Color(0xFFDCE6ED)
+                  : Colors.transparent,
+              child: Center(
+                child: Container(
+                  width: frameWidth,
+                  height: usePhoneFrame ? frameHeight : constraints.maxHeight,
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(usePhoneFrame ? 24 : 0),
+                    boxShadow: usePhoneFrame
+                        ? [
+                            BoxShadow(
+                              color: const Color(
+                                0xFF173B75,
+                              ).withValues(alpha: 0.16),
+                              blurRadius: 28,
+                              offset: const Offset(0, 10),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: child,
+                ),
+              ),
+            );
+          },
+        );
+      },
       theme: ThemeData(
         colorScheme:
             ColorScheme.fromSeed(
@@ -145,9 +193,9 @@ class _AuthenticatedHomeState extends State<_AuthenticatedHome> {
       name: widget.user.displayName ?? '',
       email: widget.user.email ?? '',
     );
-    // Registra el token FCM para poder recibir notificaciones push
-    // (requiere la Cloud Function descrita en notification_service.dart)
-    await NotificationService().initialize(widget.user.uid);
+    if (!kIsWeb) {
+      await NotificationService().initialize(widget.user.uid);
+    }
   }
 
   @override

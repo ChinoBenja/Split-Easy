@@ -137,13 +137,15 @@ service cloud.firestore {
         ])
         && request.resource.data.keys().hasOnly([
           'fromUid', 'fromName', 'toUid', 'toName', 'amount',
-          'createdBy', 'createdByName', 'createdAt', 'note', 'hasReceipt'
+          'createdBy', 'createdByName', 'createdAt', 'note', 'hasReceipt',
+          'expenseId'
         ])
         && request.resource.data.fromUid is string
         && request.resource.data.toUid is string
         && request.resource.data.fromName is string
         && request.resource.data.toName is string
         && request.resource.data.fromUid != request.resource.data.toUid
+        && request.resource.data.fromUid == request.auth.uid
         && request.resource.data.fromUid in get(
           /databases/$(database)/documents/groups/$(groupId)
         ).data.memberIds
@@ -156,6 +158,15 @@ service cloud.firestore {
         && request.resource.data.createdByName is string
         && request.resource.data.hasReceipt is bool
         && request.resource.data.createdAt is timestamp
+        && (
+          !request.resource.data.keys().hasAny(['expenseId'])
+          || (
+            request.resource.data.expenseId is string
+            && exists(
+              /databases/$(database)/documents/groups/$(groupId)/expenses/$(request.resource.data.expenseId)
+            )
+          )
+        )
         && (
           !request.resource.data.keys().hasAny(['note'])
           || (

@@ -5,6 +5,7 @@ import '../../models/category_model.dart';
 import '../../models/expense_model.dart';
 import '../../models/group_model.dart';
 import '../../models/balance_model.dart';
+import '../../models/settlement_record_model.dart';
 import '../../services/firestore_service.dart';
 import 'add_expense_screen.dart';
 import 'assistant_chat_screen.dart';
@@ -20,6 +21,8 @@ import 'group_members_screen.dart';
 import 'group_options_screen.dart';
 import '../widgets/profile_photo_image.dart';
 import '../widgets/main_navigation_bar.dart';
+import '../widgets/register_settlement_dialog.dart';
+import '../widgets/settlement_suggestion_card.dart';
 
 class GroupDetailScreen extends StatefulWidget {
   final GroupModel group;
@@ -40,12 +43,21 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
   final _dateFormat = DateFormat('dd MMM yyyy', 'es');
 
   bool _isDeletingGroup = false;
+  bool _isRegisteringSettlement = false;
   int? _unreadCountOverride;
   Future<String?>? _userPhotoFuture;
+  late final Future<Map<String, String>> _memberPhotoUrls;
+  late final Stream<List<SettlementRecord>> _settlementRecordsStream;
 
   @override
   void initState() {
     super.initState();
+    _memberPhotoUrls = _firestoreService.getUserPhotoUrls(
+      widget.group.memberIds,
+    );
+    _settlementRecordsStream = _firestoreService.watchGroupSettlements(
+      widget.group.id,
+    );
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       _userPhotoFuture = _firestoreService.getUserPhoto(user.uid);
@@ -133,6 +145,14 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
         ),
         actions: [
           IconButton(
+            tooltip: 'Balance del grupo',
+            icon: const Icon(Icons.account_balance_wallet_rounded),
+            onPressed: _isDeletingGroup
+                ? null
+                : () =>
+                      _navigateTo(context, BalanceScreen(group: widget.group)),
+          ),
+          IconButton(
             tooltip: 'Opciones del grupo',
             icon: const Icon(Icons.settings_rounded),
             onPressed: _isDeletingGroup
@@ -172,117 +192,165 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
           }
 
           final expenses = snapshot.data!;
-          final totalSpent = expenses.fold<double>(
-            0,
-            (total, expense) => total + expense.amount,
-          );
-          final userId = FirebaseAuth.instance.currentUser?.uid;
-          final userContribution = userId == null
-              ? 0.0
-              : expenses.fold<double>(
-                  0,
-                  (total, expense) => total + (expense.payments[userId] ?? 0),
-                );
-          final memberBalances = _firestoreService.calculateBalances(
-            group: widget.group,
-            expenses: expenses,
-          );
-          final settlements = _firestoreService.simplifyDebts(memberBalances);
-          final userBalance = userId == null
-              ? 0.0
-              : memberBalances
-                        .where((balance) => balance.uid == userId)
-                        .firstOrNull
-                        ?.balance ??
-                    0.0;
-
-          return Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 920),
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 112),
-                children: [
-                  Text(
-                    'Resumen financiero',
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      color: const Color(0xFF173B75),
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.4,
-                    ),
+          return StreamBuilder<List<SettlementRecord>>(
+            stream: _settlementRecordsStream,
+            builder: (context, settlementSnapshot) {
+              final hasSettlementData =
+                  settlementSnapshot.hasData && settlementSnapshot.data != null;
+              final recordedSettlements =
+                  settlementSnapshot.data ?? const <SettlementRecord>[];
+              final totalSpent = expenses.fold<double>(
+                0,
+                (total, expense) => total + expense.amount,
+              );
+              final userId = FirebaseAuth.instance.currentUser?.uid;
+              final userContribution = userId == null
+                  ? 0.0
+                  : expenses.fold<double>(
+                      0,
+                      (total, expense) =>
+                          total + (expense.payments[userId] ?? 0),
+                    );
+              final memberBalances = _firestoreService.calculateBalances(
+                group: widget.group,
+                expenses: expenses,
+                settlements: recordedSettlements,
+              );
+              final settlements = _firestoreService.simplifyDebts(
+                memberBalances,
+              );
+              final userBalance = userId == null
+                  ? 0.0
+                  : memberBalances
+                            .where((balance) => balance.uid == userId)
+                            .firstOrNull
+                            ?.balance ??
+                        0.0;
+              final userDebts = settlements
+                  .where((settlement) => settlement.fromUid == userId)
+                  .toList();
+              final Widget financialSummary;
+              if (settlementSnapshot.hasError) {
+                financialSummary = Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFFDCE8EF)),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Consulta los gastos y tu situación en este grupo.',
+                  child: Text(
+                    'No se pudo cargar tu liquidación: ${settlementSnapshot.error}',
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      color: const Color(0xFF687C8D),
+                      color: colors.error,
                     ),
                   ),
-                  const SizedBox(height: 18),
-                  _FinancialSummaryCard(
-                    totalSpent: totalSpent,
-                    userContribution: userContribution,
-                    userBalance: userBalance,
-                    currencyFormat: _currencyFormat,
-                    onDebtTap: () => _showDebtDetails(settlements, userId),
+                );
+              } else if (!hasSettlementData) {
+                financialSummary = const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(20),
+                    child: CircularProgressIndicator(color: Color(0xFF2457C5)),
                   ),
-                  const SizedBox(height: 24),
-                  Row(
+                );
+              } else {
+                financialSummary = _FinancialSummaryCard(
+                  totalSpent: totalSpent,
+                  userContribution: userContribution,
+                  userBalance: userBalance,
+                  currencyFormat: _currencyFormat,
+                  onDebtTap: () => _showDebtDetails(settlements, userId),
+                  userDebts: userDebts,
+                  memberPhotoUrls: _memberPhotoUrls,
+                  isRegisteringSettlement: _isRegisteringSettlement,
+                  onRegisterSettlement: _registerSettlement,
+                );
+              }
+
+              return Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 920),
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 112),
                     children: [
-                      Expanded(
-                        child: Text(
-                          'Gastos del grupo',
-                          style: theme.textTheme.titleLarge?.copyWith(
-                            color: const Color(0xFF173B75),
-                            fontWeight: FontWeight.w700,
-                          ),
+                      Text(
+                        'Resumen financiero',
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          color: const Color(0xFF173B75),
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.4,
                         ),
                       ),
-                      if (expenses.isNotEmpty)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 11,
-                            vertical: 7,
+                      const SizedBox(height: 6),
+                      Text(
+                        'Consulta los gastos y tu situación en este grupo.',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: const Color(0xFF687C8D),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      financialSummary,
+                      const SizedBox(height: 24),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Gastos del grupo',
+                              style: theme.textTheme.titleLarge?.copyWith(
+                                color: const Color(0xFF173B75),
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                           ),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: const Color(0xFFDCE8EF)),
-                          ),
-                          child: Text(
-                            '${expenses.length} ${expenses.length == 1 ? 'movimiento' : 'movimientos'}',
-                            style: theme.textTheme.labelMedium?.copyWith(
-                              color: const Color(0xFF526879),
-                              fontWeight: FontWeight.w600,
+                          if (expenses.isNotEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 11,
+                                vertical: 7,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: const Color(0xFFDCE8EF),
+                                ),
+                              ),
+                              child: Text(
+                                '${expenses.length} ${expenses.length == 1 ? 'movimiento' : 'movimientos'}',
+                                style: theme.textTheme.labelMedium?.copyWith(
+                                  color: const Color(0xFF526879),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      if (expenses.isEmpty)
+                        const _EmptyExpensesState()
+                      else
+                        ...expenses.map(
+                          (expense) => Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: _ExpenseCard(
+                              expense: expense,
+                              formattedDate: _dateFormat.format(expense.date),
+                              currencyFormat: _currencyFormat,
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => ExpenseDetailScreen(
+                                    group: widget.group,
+                                    expense: expense,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                         ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  if (expenses.isEmpty)
-                    const _EmptyExpensesState()
-                  else
-                    ...expenses.map(
-                      (expense) => Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: _ExpenseCard(
-                          expense: expense,
-                          formattedDate: _dateFormat.format(expense.date),
-                          currencyFormat: _currencyFormat,
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => ExpenseDetailScreen(
-                                group: widget.group,
-                                expense: expense,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           );
         },
       ),
@@ -481,6 +549,45 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     );
     if (!mounted) return;
     setState(() => _unreadCountOverride = null);
+  }
+
+  Future<void> _registerSettlement(SettlementTransaction settlement) async {
+    if (_isRegisteringSettlement) return;
+    setState(() => _isRegisteringSettlement = true);
+    try {
+      final draft = await showDialog<SettlementDraft>(
+        context: context,
+        builder: (_) => RegisterSettlementDialog(
+          settlement: settlement,
+          currencyFormat: _currencyFormat,
+        ),
+      );
+      if (!mounted || draft == null) return;
+      await _firestoreService.registerSettlement(
+        groupId: widget.group.id,
+        fromUid: settlement.fromUid,
+        toUid: settlement.toUid,
+        amount: draft.amount,
+        note: draft.note,
+        imageBase64: draft.imageBase64,
+        imageContentType: draft.imageContentType,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Pago registrado. El balance del grupo fue actualizado.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo registrar el pago: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _isRegisteringSettlement = false);
+    }
   }
 
   void _handleGroupAction(GroupOptionsAction action) {
@@ -785,6 +892,10 @@ class _FinancialSummaryCard extends StatelessWidget {
     required this.userBalance,
     required this.currencyFormat,
     required this.onDebtTap,
+    required this.userDebts,
+    required this.memberPhotoUrls,
+    required this.isRegisteringSettlement,
+    required this.onRegisterSettlement,
   });
 
   final double totalSpent;
@@ -792,6 +903,10 @@ class _FinancialSummaryCard extends StatelessWidget {
   final double userBalance;
   final NumberFormat currencyFormat;
   final VoidCallback onDebtTap;
+  final List<SettlementTransaction> userDebts;
+  final Future<Map<String, String>> memberPhotoUrls;
+  final bool isRegisteringSettlement;
+  final ValueChanged<SettlementTransaction> onRegisterSettlement;
 
   @override
   Widget build(BuildContext context) {
@@ -964,6 +1079,33 @@ class _FinancialSummaryCard extends StatelessWidget {
                       );
                     },
                   ),
+                  if (userDebts.isNotEmpty) ...[
+                    const SizedBox(height: 20),
+                    Divider(color: Colors.white.withValues(alpha: 0.22)),
+                    const SizedBox(height: 14),
+                    Text(
+                      'Saldar Deuda',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    ...userDebts.map(
+                      (settlement) => Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: SettlementSuggestionCard(
+                          settlement: settlement,
+                          currencyFormat: currencyFormat,
+                          memberPhotoUrls: memberPhotoUrls,
+                          isRegistering: isRegisteringSettlement,
+                          onRegisterPayment: isRegisteringSettlement
+                              ? null
+                              : () => onRegisterSettlement(settlement),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
